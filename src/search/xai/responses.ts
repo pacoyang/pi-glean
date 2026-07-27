@@ -245,10 +245,19 @@ export function citationsFrom(result: XaiResponsesResult, text: string): Citatio
  * citation still records the call it made.
  */
 function assertSearched(
-  result: { searchCalls: SearchCall[]; citations: Citation[] },
+  result: { searchCalls: SearchCall[]; citations: Citation[]; raw: unknown },
   endpoint: string,
 ): void {
-  if (result.searchCalls.length > 0 || result.citations.length > 0) return;
+  // xAI reports this itself, which beats inferring it from what we managed to
+  // parse: the proxy echoes `tools: []` and `num_server_side_tools_used: 0`
+  // even though a web_search tool was sent. Trust the count when it is present.
+  const used = (result.raw as { usage?: { num_server_side_tools_used?: unknown } })?.usage
+    ?.num_server_side_tools_used;
+  if (typeof used === "number") {
+    if (used > 0) return;
+  } else if (result.searchCalls.length > 0 || result.citations.length > 0) {
+    return;
+  }
   throw new GleanError(
     "invalid-response",
     "xAI answered without performing a search — no search calls and no citations.",
@@ -289,7 +298,7 @@ export async function runXaiWebSearch(
 
   const { text, searchCalls } = extractOutput(result);
   const citations = citationsFrom(result, text);
-  assertSearched({ searchCalls, citations }, options.baseUrl ?? XAI_API_BASE);
+  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? XAI_API_BASE);
   return { text, searchCalls, citations, raw: result };
 }
 
@@ -318,6 +327,6 @@ export async function runXSearch(
 
   const { text, searchCalls } = extractOutput(result);
   const citations = citationsFrom(result, text);
-  assertSearched({ searchCalls, citations }, options.baseUrl ?? XAI_API_BASE);
+  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? XAI_API_BASE);
   return { text, searchCalls, citations, raw: result };
 }

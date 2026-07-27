@@ -520,3 +520,54 @@ describe("refusing an unsearched answer", () => {
     assert.equal(result.searchCalls.length, 1);
   });
 });
+
+describe("trusting xAI's own tool-use count", () => {
+  it("rejects a reply xAI reports as having used no server-side tool", async () => {
+    // The verbatim shape cli-chat-proxy.grok.com returns: our web_search tool
+    // echoed back as an empty array, and the count saying so outright.
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        model: "grok-4.5",
+        tools: [],
+        output: [
+          { type: "reasoning", summary: [] },
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "I'll look that up.", annotations: [] }],
+          },
+        ],
+        usage: { num_sources_used: 0, num_server_side_tools_used: 0 },
+      }),
+    );
+    await assert.rejects(
+      () => runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch }),
+      /without performing a search/,
+    );
+  });
+
+  it("accepts a reply the count vouches for, even with nothing parsed out", async () => {
+    // The count is the authority when present: trusting our own parsing here
+    // would reject a genuine search whose result shape we do not recognise.
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [{ type: "message", content: [{ type: "output_text", text: "An answer." }] }],
+        usage: { num_server_side_tools_used: 2 },
+      }),
+    );
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+    assert.equal(result.text, "An answer.");
+  });
+
+  it("falls back to the parsed signals when the count is absent", async () => {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          { type: "web_search_call", action: { type: "search", query: "q" }, status: "completed" },
+          { type: "message", content: [{ type: "output_text", text: "An answer." }] },
+        ],
+      }),
+    );
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+    assert.equal(result.searchCalls.length, 1);
+  });
+});

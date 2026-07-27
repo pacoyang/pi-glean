@@ -54,10 +54,10 @@ Frames need no credential. Whole-video understanding is the only part that does,
 
 ### A note on xAI
 
-`/login xai` authenticates fine against a consumer Grok subscription, but these
-models are billed as xAI **API** usage, and an account with no API spend has a
-rate-limit tier of 0 requests per minute — every search comes back `429
-resource-exhausted`. A Grok subscription alone is not enough; see
+`/login xai` authenticates fine against a consumer Grok subscription, but the
+Responses search tools are billed as xAI **API** usage, and an account with no
+API spend has a rate-limit tier of 0 requests per minute — every search comes
+back `429 resource-exhausted`. A Grok subscription alone is not enough; see
 [console.x.ai rate limits](https://console.x.ai/team/default/rate-limits).
 
 The Grok CLI proxy (`cli-chat-proxy.grok.com`) is **not** a workaround. It
