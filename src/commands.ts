@@ -20,7 +20,7 @@ import { hasCredentialSource } from "./credentials.ts";
 
 const CREDENTIAL_HINT: Record<Backend, string> = {
   codex: "/login openai-codex to enable",
-  xai: "/login grok-build (or /login xai) to enable",
+  xai: "/login grok-build, or set XAI_API_KEY",
   tavily: "set TAVILY_API_KEY",
   perplexity: "set PERPLEXITY_API_KEY",
   exa: "no credentials needed",

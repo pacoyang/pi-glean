@@ -1,7 +1,7 @@
 /**
  * xAI OAuth device-code flow.
  *
- * Registered with pi so `/login xai` works; pi then owns storage and refresh.
+ * Registered with pi so `/login grok-build` works; pi then owns storage and refresh.
  * pi-glean never reads auth.json itself.
  */
 
@@ -44,9 +44,16 @@ const GROK_BUILD_VARIANT: XaiOAuthVariant = {
   baseUrl: "https://cli-chat-proxy.grok.com/v1",
 };
 
+/**
+ * pi's built-in xAI slot, where `XAI_API_KEY` lands.
+ *
+ * Read but never offered as a login. The device grant for this slot omits the
+ * conversations scopes, so it cannot run the search tools — advertising it
+ * would hand people a credential that fails for a reason they cannot see.
+ */
 export const XAI_API_VARIANT: XaiOAuthVariant = {
   providerId: "xai",
-  name: "xAI (API credit)",
+  name: "xAI (API key)",
   scope: BASE_SCOPE,
   referrer: "pi",
   // The public API. An XAI_API_KEY is a credential for this host and is not
@@ -54,8 +61,11 @@ export const XAI_API_VARIANT: XaiOAuthVariant = {
   baseUrl: "https://api.x.ai/v1",
 };
 
-/** Most capable first: only the grok-build grant can run the search tools. */
+/** Credential slots, most capable first. */
 export const XAI_VARIANTS = [GROK_BUILD_VARIANT, XAI_API_VARIANT] as const;
+
+/** The only grant worth offering: the other cannot search. */
+export const XAI_LOGIN_VARIANTS = [GROK_BUILD_VARIANT] as const;
 
 /** The slice of pi's registry this needs; keeps auth.ts free of provider types. */
 export interface ApiKeyLookup {

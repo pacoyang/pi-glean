@@ -29,8 +29,7 @@ import { runXSearch } from "../search/xai/responses.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 const MISSING_XAI =
-  "X search requires xAI. Run `/login grok-build` to use a Grok subscription, or `/login xai` " +
-  "if you have xAI API credit. " +
+  "X search requires xAI. Run `/login grok-build` for a Grok subscription, or set XAI_API_KEY. " +
   "glean_search is not a substitute — it does not index X's corpus.";
 
 function sessionIdOf(ctx: ExtensionContext): string | null {

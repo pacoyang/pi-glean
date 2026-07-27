@@ -81,10 +81,10 @@ describe("eager registration", () => {
       fake.tools.map((t) => t.name),
       ["glean_search", "glean_fetch", "glean_get_content"],
     );
-    // Both xAI grants, so `/login grok-build` works without any other
-    // extension installed — that is the only grant that can run the search
-    // tools on a subscription.
-    assert.deepEqual(fake.providers, ["grok-build", "xai"]);
+    // Only the subscription grant is offered as a login: pi resolves
+    // XAI_API_KEY into its own built-in `xai` slot, and the OAuth grant for
+    // that slot lacks the scopes the search tools need.
+    assert.deepEqual(fake.providers, ["grok-build"]);
     assert.ok(fake.commands.includes("glean-status"));
   });
 
@@ -103,10 +103,13 @@ describe("eager registration", () => {
     assert.ok(names.includes("glean_get_content"), "fetch alone still needs paging");
   });
 
-  it("registers the xai provider exactly once", async () => {
+  it("registers the subscription grant exactly once", async () => {
     const fake = fakeApi();
     await piGlean(fake.api);
-    assert.equal(fake.providers.filter((p) => p === "xai").length, 1);
+    assert.equal(fake.providers.filter((p) => p === "grok-build").length, 1);
+    // The `xai` slot is pi's own; registering an OAuth grant for it would put
+    // a second, strictly weaker xAI entry in the login list.
+    assert.ok(!fake.providers.includes("xai"));
   });
 
   it("registers nothing when disabled", async () => {

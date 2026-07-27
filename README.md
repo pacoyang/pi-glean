@@ -56,16 +56,17 @@ Frames need no credential. Whole-video understanding is the only part that does,
 
 Two ways in, and the difference matters more than it looks:
 
-|                    | Grok subscription                           | xAI API key                    |
-| ------------------ | ------------------------------------------- | ------------------------------ |
-| Set up with        | `/login grok-build`                         | `XAI_API_KEY`, or `/login xai` |
-| Endpoint           | `cli-chat-proxy.grok.com`                   | `api.x.ai`                     |
-| Extra OAuth scopes | `conversations:read`, `conversations:write` | —                              |
+|                    | Grok subscription                           | xAI API key   |
+| ------------------ | ------------------------------------------- | ------------- |
+| Set up with        | `/login grok-build`                         | `XAI_API_KEY` |
+| Endpoint           | `cli-chat-proxy.grok.com`                   | `api.x.ai`    |
+| Extra OAuth scopes | `conversations:read`, `conversations:write` | —             |
 
-The scopes are what unlock the Responses search tools. A plain `xai` credential
-without API credit gets `429 resource-exhausted` at a team rate limit of 0
-requests per minute on every model, because those calls bill against API spend
-rather than the subscription.
+Those scopes are what unlock the Responses search tools, and only the
+subscription grant carries them — which is why `/login grok-build` is the way in
+rather than a plain xAI OAuth login. An `XAI_API_KEY` bills against API spend
+instead; without credit, xAI answers `429 resource-exhausted` at a team rate
+limit of 0 requests per minute on every model.
 
 `/login grok-build` is the verified path. The API-credit column follows from
 xAI's own error — the tier is set by historical API spend — but has not been

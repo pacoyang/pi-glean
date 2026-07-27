@@ -21,7 +21,7 @@ import { clearCloneCache } from "./src/github/extract.ts";
 import { RateLimiter } from "./src/ratelimit.ts";
 import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
-import { XAI_VARIANTS, createXaiOAuth, resolveXaiCredential } from "./src/search/xai/auth.ts";
+import { XAI_LOGIN_VARIANTS, createXaiOAuth, resolveXaiCredential } from "./src/search/xai/auth.ts";
 
 import { buildFetchTool } from "./src/tools/fetch.ts";
 import { buildGetContentTool } from "./src/tools/get-content.ts";
@@ -57,10 +57,10 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     }),
   };
 
-  // Both xAI grants, so neither login depends on another extension being
-  // installed. registerProvider upserts, so coexisting with an extension that
-  // registers the same slot shares the credential rather than clashing.
-  for (const variant of XAI_VARIANTS) {
+  // Only the subscription grant. pi resolves XAI_API_KEY into its own built-in
+  // `xai` slot without help, and the OAuth grant for that slot cannot search.
+  // registerProvider upserts, so sharing a slot with another extension is safe.
+  for (const variant of XAI_LOGIN_VARIANTS) {
     pi.registerProvider(variant.providerId, { oauth: createXaiOAuth(variant) });
   }
 
