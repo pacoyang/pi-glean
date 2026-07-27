@@ -31,6 +31,49 @@ export function hasFullInlineCoverage(urls: string[], inline: ExtractedContent[]
   return urls.every((url) => covered.has(url));
 }
 
+/** Twelve stills is already a lot of context; beyond that the text is better. */
+const MAX_IMAGES = 12;
+
+export type MediaBlock =
+  | { type: "image"; data: string; mimeType: string }
+  | { type: "text"; text: string };
+
+/**
+ * Turns extracted frames into content blocks.
+ *
+ * Each image is followed by a line naming its position: without that the model
+ * sees a pile of stills and cannot say which moment any of them shows. A
+ * thumbnail stands in only when there are no frames.
+ */
+export function mediaBlocks(results: ExtractedContent[], max = MAX_IMAGES): MediaBlock[] {
+  const blocks: MediaBlock[] = [];
+  let count = 0;
+
+  for (const result of results) {
+    for (const frame of result.frames ?? []) {
+      if (count >= max) return blocks;
+      blocks.push({ type: "image", data: frame.data, mimeType: frame.mimeType });
+      blocks.push({ type: "text", text: `Frame at ${frame.timestamp}` });
+      count++;
+    }
+    if (!result.frames?.length && result.thumbnail) {
+      if (count >= max) return blocks;
+      blocks.push({
+        type: "image",
+        data: result.thumbnail.data,
+        mimeType: result.thumbnail.mimeType,
+      });
+      blocks.push({ type: "text", text: `Thumbnail for ${result.title || result.url}` });
+      count++;
+    }
+  }
+  return blocks;
+}
+
+function imageCount(blocks: MediaBlock[]): number {
+  return blocks.filter((block) => block.type === "image").length;
+}
+
 export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
   const { config } = deps;
   const names = config.toolNames;
@@ -136,8 +179,9 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
             `Use ${names.getContent}({ responseId: "${responseId}", urlIndex: 0, offset: ${config.fetch.maxInlineChars} }) for the next slice.`;
         }
 
+        const media = mediaBlocks(results);
         return {
-          content: [{ type: "text" as const, text }],
+          content: [{ type: "text" as const, text }, ...media],
           details: {
             urls: urlList,
             urlCount: 1,
@@ -147,6 +191,8 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
             via: result.via,
             responseId,
             truncated,
+            imageCount: imageCount(media),
+            ...(result.duration !== undefined ? { duration: result.duration } : {}),
           },
         };
       }
@@ -161,9 +207,17 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
         text += `\n---\nUse ${names.getContent}({ responseId: "${responseId}", urlIndex: 0 }) to read each one.`;
       }
 
+      const media = mediaBlocks(results);
       return {
-        content: [{ type: "text" as const, text }],
-        details: { urls: urlList, urlCount: urlList.length, successful, totalChars, responseId },
+        content: [{ type: "text" as const, text }, ...media],
+        details: {
+          urls: urlList,
+          urlCount: urlList.length,
+          successful,
+          totalChars,
+          responseId,
+          imageCount: imageCount(media),
+        },
       };
     },
   });

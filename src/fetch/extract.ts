@@ -209,6 +209,21 @@ export async function extractUrl(
 ): Promise<ExtractedContent> {
   const { config } = deps;
 
+  // Local video files first: they are paths, not URLs, so the SSRF check below
+  // would reject them outright.
+  if (config.video.enabled) {
+    const { extractLocalVideo } = await import("../media/video.ts");
+    const video = await extractLocalVideo(
+      url,
+      {
+        config,
+        ...(options.signal ? { signal: options.signal } : {}),
+      },
+      options,
+    );
+    if (video) return video;
+  }
+
   // Reject before anything leaves the process, so a prompt-injected internal
   // URL never even reaches the fetch layer.
   try {
@@ -233,6 +248,20 @@ export async function extractUrl(
       ...(options.forceClone !== undefined ? { forceClone: options.forceClone } : {}),
     });
     if (repo) return repo;
+  }
+
+  // A YouTube watch page holds no article text; the transcript is the content.
+  if (config.youtube.enabled) {
+    const { extractYouTube } = await import("../media/youtube.ts");
+    const video = await extractYouTube(
+      url,
+      {
+        config,
+        ...(options.signal ? { signal: options.signal } : {}),
+      },
+      options,
+    );
+    if (video) return video;
   }
 
   const direct = await extractViaHttp(url, deps, options);
