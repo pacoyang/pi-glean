@@ -212,7 +212,8 @@ describe("no backends at all", () => {
           assert.equal(error.kind, "config");
           assert.match(error.hint ?? "", /exa needs no credentials/);
           assert.match(error.hint ?? "", /login openai-codex/);
-          assert.match(error.hint ?? "", /login xai/);
+          // grok-build, not xai: that is the grant a subscription lands in.
+          assert.match(error.hint ?? "", /login grok-build/);
           return true;
         },
       );

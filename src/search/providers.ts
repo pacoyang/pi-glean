@@ -23,7 +23,7 @@ import { createTransport } from "./codex/transport.ts";
 import { runExaSearch } from "./exa.ts";
 import { runPerplexitySearch } from "./perplexity.ts";
 import { runTavilySearch } from "./tavily.ts";
-import { XAI_PROVIDER_ID } from "./xai/constants.ts";
+import { XAI_CREDENTIAL_PROVIDERS } from "./xai/constants.ts";
 import { runXaiWebSearch } from "./xai/responses.ts";
 
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
@@ -66,6 +66,20 @@ export interface ProviderDef {
   synthesized: boolean;
   isAvailable(ctx: ProviderContext): Promise<boolean>;
   search(params: SearchParams, ctx: ProviderContext): Promise<SearchAnswer>;
+}
+
+/**
+ * First xAI credential available, preferring the subscription grant.
+ *
+ * See XAI_CREDENTIAL_PROVIDERS: the plain `xai` token cannot run the search
+ * tools on a subscription-only account, so grok-build is tried first.
+ */
+export async function xaiCredential(ctx: ProviderContext): Promise<string | undefined> {
+  for (const provider of XAI_CREDENTIAL_PROVIDERS) {
+    const key = await apiKeyFor(ctx, provider);
+    if (key) return key;
+  }
+  return undefined;
 }
 
 async function apiKeyFor(ctx: ProviderContext, provider: string): Promise<string | undefined> {
@@ -194,14 +208,17 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
   xai: {
     synthesized: true,
     async isAvailable(ctx) {
-      return (await apiKeyFor(ctx, XAI_PROVIDER_ID)) !== undefined;
+      return (await xaiCredential(ctx)) !== undefined;
     },
     async search(params, ctx) {
-      const apiKey = await apiKeyFor(ctx, XAI_PROVIDER_ID);
+      const apiKey = await xaiCredential(ctx);
       if (!apiKey) {
-        throw new GleanError("auth", "xAI search requires an xAI subscription.", {
+        throw new GleanError("auth", "xAI search requires an xAI credential.", {
           source: "xai",
-          hint: "Run `/login xai`.",
+          hint:
+            "Run `/login grok-build` to use a Grok " +
+            "subscription. `/login xai` alone only reaches the API-billed path, which needs " +
+            "xAI API credit.",
         });
       }
       const xaiConfig = ctx.config.search.xai;

@@ -12,6 +12,7 @@ import {
   citationsFrom,
   clampPromptCacheKey,
   glueCitationSpacing,
+  expandToSentence,
   isGrokCliProxyBaseUrl,
   runXSearch,
   runXaiWebSearch,
@@ -569,5 +570,115 @@ describe("trusting xAI's own tool-use count", () => {
     );
     const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
     assert.equal(result.searchCalls.length, 1);
+  });
+});
+
+describe("xai citation annotations", () => {
+  // Live offsets span exactly the inline marker — verified against a real
+  // response where start..end was 50..105 for a 55-character marker.
+  const SENTENCE = "The answer is 2026-07-04. It is confirmed on the releases page.";
+  const MARKER = "[[1]](https://github.com/yt-dlp/yt-dlp/releases)";
+  const TEXT = SENTENCE + MARKER;
+
+  function annotated(text = TEXT, markerAt = SENTENCE.length, markerLen = MARKER.length) {
+    return {
+      output: [
+        { type: "web_search_call", status: "completed", action: { type: "search", query: "q" } },
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text,
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://github.com/yt-dlp/yt-dlp/releases",
+                  start_index: markerAt,
+                  end_index: markerAt + markerLen,
+                  title: "1",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      usage: { num_server_side_tools_used: 3 },
+    };
+  }
+
+  it("reads url_citation annotations, which the top-level array no longer carries", async () => {
+    // Live responses have no `citations` array at all — sources arrive only as
+    // annotations, so reading just the array reported zero sources for every
+    // successful search.
+    const fake = fakeFetch(() => jsonResponse(annotated()));
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+
+    assert.equal(result.citations.length, 1);
+    assert.equal(result.citations[0]?.url, "https://github.com/yt-dlp/yt-dlp/releases");
+    // A numeric title is the inline marker, not a name.
+    assert.equal(result.citations[0]?.title, "github.com");
+  });
+
+  it("attributes the sentence, not the citation marker", async () => {
+    // Codex's offsets point at the prose; xAI's point at the `[[1]](url)`
+    // marker. Citation.startIndex means the same thing either way or it is
+    // useless, so the marker span is widened to the sentence it follows.
+    const fake = fakeFetch(() => jsonResponse(annotated()));
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+
+    const { startIndex, endIndex } = result.citations[0]!;
+    const attributed = result.text.slice(startIndex, endIndex);
+    assert.match(attributed, /It is confirmed on the releases page\./);
+    assert.doesNotMatch(attributed, /The answer is/, "only the sentence it annotates");
+  });
+
+  it("recovers sources from inline markers when nothing else carries them", async () => {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          { type: "web_search_call", status: "completed", action: { type: "search", query: "q" } },
+          {
+            type: "message",
+            content: [
+              {
+                type: "output_text",
+                text: "Answer.[[1]](https://a.test/x) More.[[2]](https://b.test/y)",
+              },
+            ],
+          },
+        ],
+        usage: { num_server_side_tools_used: 2 },
+      }),
+    );
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+    assert.deepEqual(
+      result.citations.map((c) => c.url),
+      ["https://a.test/x", "https://b.test/y"],
+    );
+  });
+
+  it("still reads the legacy top-level array", async () => {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          { type: "web_search_call", status: "completed", action: { type: "search", query: "q" } },
+          { type: "message", content: [{ type: "output_text", text: "Answer." }] },
+        ],
+        citations: ["https://legacy.test/a"],
+      }),
+    );
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+    assert.equal(result.citations[0]?.url, "https://legacy.test/a");
+  });
+
+  it("leaves a prose span untouched", () => {
+    // A Codex-style span already *is* the attributed text. Position alone
+    // cannot tell it from a marker — both follow a sentence end — so widening
+    // by position would swallow the sentence before every Codex citation.
+    const text = "First sentence. Second sentence here. Third.";
+    assert.deepEqual(expandToSentence(text, 16, 36), [16, 36]);
+    // Out-of-range input is returned untouched rather than silently clamped.
+    assert.deepEqual(expandToSentence(text, 5, 999), [5, 999]);
   });
 });

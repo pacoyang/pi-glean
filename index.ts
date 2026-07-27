@@ -22,7 +22,7 @@ import { RateLimiter } from "./src/ratelimit.ts";
 import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
 import { createXaiOAuth } from "./src/search/xai/auth.ts";
-import { XAI_PROVIDER_ID } from "./src/search/xai/constants.ts";
+import { XAI_CREDENTIAL_PROVIDERS, XAI_PROVIDER_ID } from "./src/search/xai/constants.ts";
 import { buildFetchTool } from "./src/tools/fetch.ts";
 import { buildGetContentTool } from "./src/tools/get-content.ts";
 import { abortPendingFetches, markSessionActive } from "./src/tools/prefetch.ts";
@@ -96,7 +96,12 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     if (!xSearchRegistered && config.tools.xSearch) {
       let hasXai = false;
       try {
-        hasXai = Boolean(await ctx.modelRegistry.getApiKeyForProvider(XAI_PROVIDER_ID));
+        for (const provider of XAI_CREDENTIAL_PROVIDERS) {
+          if (await ctx.modelRegistry.getApiKeyForProvider(provider)) {
+            hasXai = true;
+            break;
+          }
+        }
       } catch {
         hasXai = false;
       }

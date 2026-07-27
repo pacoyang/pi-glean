@@ -24,12 +24,13 @@ import type { ResolvedConfig } from "../config.ts";
 import { GleanError, classifyError } from "../errors.ts";
 import { formatSources } from "../search/citations.ts";
 import { CUSTOM_TYPE, generateId, storeResult } from "../storage.ts";
-import { XAI_PROVIDER_ID } from "../search/xai/constants.ts";
+import { XAI_CREDENTIAL_PROVIDERS } from "../search/xai/constants.ts";
 import { runXSearch } from "../search/xai/responses.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 const MISSING_XAI =
-  "X search requires xAI. Run `/login xai`. " +
+  "X search requires xAI. Run `/login grok-build` to use a Grok subscription, or `/login xai` " +
+  "if you have xAI API credit. " +
   "glean_search is not a substitute — it does not index X's corpus.";
 
 function sessionIdOf(ctx: ExtensionContext): string | null {
@@ -75,7 +76,11 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
       try {
         // Deferred registration removes the "no xAI but tool present" case, but
         // a token can still be revoked mid-session.
-        const apiKey = await ctx.modelRegistry.getApiKeyForProvider(XAI_PROVIDER_ID);
+        let apiKey: string | undefined;
+        for (const provider of XAI_CREDENTIAL_PROVIDERS) {
+          apiKey = await ctx.modelRegistry.getApiKeyForProvider(provider);
+          if (apiKey) break;
+        }
         if (!apiKey) {
           throw new GleanError("auth", MISSING_XAI, { source: "xai" });
         }

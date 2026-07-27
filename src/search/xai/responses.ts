@@ -10,7 +10,7 @@
  */
 
 import { GleanError, classifyHttpStatus, formatHttpErrorBody } from "../../errors.ts";
-import type { Citation, SearchCall } from "../citations.ts";
+import { hostnameOf, type Citation, type SearchCall } from "../citations.ts";
 import {
   DEFAULT_WEB_SEARCH_MODEL,
   DEFAULT_X_SEARCH_MODEL,
@@ -167,10 +167,14 @@ export interface XaiSearchResult {
 export function extractOutput(result: XaiResponsesResult): {
   text: string;
   searchCalls: SearchCall[];
+  annotations: Citation[];
 } {
   const items = Array.isArray(result.output) ? result.output : [];
   const textParts: string[] = [];
   const searchCalls: SearchCall[] = [];
+  const annotations: Citation[] = [];
+  // Offsets are relative to each text part; parts are joined with a newline.
+  let consumed = 0;
 
   for (const raw of items) {
     if (!raw || typeof raw !== "object") continue;
@@ -184,7 +188,10 @@ export function extractOutput(result: XaiResponsesResult): {
           (part as { type?: string }).type === "output_text" &&
           typeof (part as { text?: unknown }).text === "string"
         ) {
-          textParts.push((part as { text: string }).text);
+          const text = (part as { text: string }).text;
+          annotations.push(...citationsFromAnnotations(part, text, consumed));
+          textParts.push(text);
+          consumed += text.length + 1;
         }
       }
       continue;
@@ -200,36 +207,126 @@ export function extractOutput(result: XaiResponsesResult): {
     }
   }
 
-  return { text: glueCitationSpacing(textParts.join("\n")), searchCalls };
+  return { text: glueCitationSpacing(textParts.join("\n")), searchCalls, annotations };
 }
 
 /**
  * xAI returns bare URLs with no offsets, so a citation's supporting sentence has
  * to be recovered from the inline `[[n]](url)` markers in the answer.
  */
-export function citationsFrom(result: XaiResponsesResult, text: string): Citation[] {
-  const urls = Array.isArray(result.citations) ? result.citations : [];
-  const sentences = text.split(/(?<=[.!?。！？])\s+/);
+/**
+ * Reads `url_citation` annotations off one message part.
+ *
+ * This is the richer of the two shapes xAI uses, and the same one Codex
+ * returns: each entry carries `start_index`/`end_index` into the answer, so a
+ * claim can be traced to the exact sentence attributed to that source. The
+ * `title` is only the marker number ("1", "2"), so it is dropped in favour of
+ * the hostname.
+ */
+/**
+ * Widens a citation-marker span to the sentence it annotates.
+ *
+ * xAI's offsets cover the inline `[[1]](url)` marker; Codex's cover the prose
+ * being attributed. `Citation.startIndex/endIndex` is documented as the latter,
+ * so slicing has to mean the same thing whichever backend answered.
+ *
+ * The two cases are told apart by content, not position: a span that begins a
+ * sentence and a marker that follows one look identical by offset, so a
+ * position-only rule would swallow the preceding sentence of every Codex span.
+ */
+export function expandToSentence(text: string, start: number, end: number): [number, number] {
+  if (start < 0 || end > text.length || start >= end) return [start, end];
+  // Already prose: nothing to widen.
+  if (!/^\s*[.,;:]?\s*\[\[\d+]]\(/.test(text.slice(start, end))) return [start, end];
 
-  return urls
-    .filter((url): url is string => typeof url === "string" && url.length > 0)
-    .map((url) => {
-      const citation: Citation = { url };
-      const sentence = sentences.find((s) => s.includes(url));
-      if (sentence) {
-        const start = text.indexOf(sentence);
-        if (start >= 0) {
-          citation.startIndex = start;
-          citation.endIndex = start + sentence.length;
-        }
+  const TERMINATOR = /[.!?。！？\n]/;
+  let from = start;
+
+  // The marker trails the sentence it annotates, so step back over the
+  // terminator closing that sentence before looking for where it began.
+  // Markdown emphasis often sits between the two (`… 2026.)**[[1]](…)`).
+  const SKIPPABLE = /[\s*_`]/;
+  while (from > 0 && SKIPPABLE.test(text[from - 1]!)) from--;
+  if (from > 0 && TERMINATOR.test(text[from - 1]!)) from--;
+
+  while (from > 0 && !TERMINATOR.test(text[from - 1]!)) from--;
+  while (from < start && /\s/.test(text[from]!)) from++;
+
+  let to = end;
+  while (to < text.length && !TERMINATOR.test(text[to]!)) to++;
+  if (to < text.length) to++;
+
+  return from < to ? [from, to] : [start, end];
+}
+
+function citationsFromAnnotations(part: unknown, text: string, offset: number): Citation[] {
+  const raw = (part as { annotations?: unknown })?.annotations;
+  if (!Array.isArray(raw)) return [];
+
+  const citations: Citation[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const a = entry as Record<string, unknown>;
+    if (a.type !== "url_citation" || typeof a.url !== "string" || !a.url) continue;
+
+    const citation: Citation = { url: a.url };
+    if (typeof a.start_index === "number" && typeof a.end_index === "number") {
+      const [from, to] = expandToSentence(text, a.start_index, a.end_index);
+      citation.startIndex = from + offset;
+      citation.endIndex = to + offset;
+    }
+    // A purely numeric title is the inline marker, not a name.
+    if (typeof a.title === "string" && a.title.trim() && !/^\d+$/.test(a.title.trim())) {
+      citation.title = a.title.trim();
+    } else {
+      const host = hostnameOf(a.url);
+      if (host) citation.title = host;
+    }
+    citations.push(citation);
+  }
+  return citations;
+}
+
+/**
+ * Citations for one answer.
+ *
+ * Annotations are preferred because they carry offsets. The top-level
+ * `citations` array is the older, offset-free shape; when both are absent the
+ * inline `[[n]](url)` markers in the text are the last resort.
+ */
+export function citationsFrom(
+  result: XaiResponsesResult,
+  text: string,
+  annotations: Citation[] = [],
+): Citation[] {
+  if (annotations.length > 0) return annotations;
+
+  const urls = Array.isArray(result.citations)
+    ? result.citations.filter((url): url is string => typeof url === "string" && url.length > 0)
+    : [];
+  // Grok writes citations inline as `[[1]](https://…)` even when it sends no
+  // separate list, so a response can carry sources in the prose alone.
+  if (urls.length === 0) {
+    for (const match of text.matchAll(/\[\[\d+]]\((https?:\/\/[^\s)]+)\)/g)) {
+      urls.push(match[1]!);
+    }
+  }
+
+  const sentences = text.split(/(?<=[.!?。！？])\s+/);
+  return urls.map((url) => {
+    const citation: Citation = { url };
+    const sentence = sentences.find((s) => s.includes(url));
+    if (sentence) {
+      const start = text.indexOf(sentence);
+      if (start >= 0) {
+        citation.startIndex = start;
+        citation.endIndex = start + sentence.length;
       }
-      try {
-        citation.title = new URL(url).hostname;
-      } catch {
-        // Leave the title unset rather than inventing one.
-      }
-      return citation;
-    });
+    }
+    const host = hostnameOf(url);
+    if (host) citation.title = host;
+    return citation;
+  });
 }
 
 /**
@@ -296,8 +393,8 @@ export async function runXaiWebSearch(
     options,
   );
 
-  const { text, searchCalls } = extractOutput(result);
-  const citations = citationsFrom(result, text);
+  const { text, searchCalls, annotations } = extractOutput(result);
+  const citations = citationsFrom(result, text, annotations);
   assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? XAI_API_BASE);
   return { text, searchCalls, citations, raw: result };
 }
@@ -325,8 +422,8 @@ export async function runXSearch(
     { ...options, sendSessionAffinity: true },
   );
 
-  const { text, searchCalls } = extractOutput(result);
-  const citations = citationsFrom(result, text);
+  const { text, searchCalls, annotations } = extractOutput(result);
+  const citations = citationsFrom(result, text, annotations);
   assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? XAI_API_BASE);
   return { text, searchCalls, citations, raw: result };
 }

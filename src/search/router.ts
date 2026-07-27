@@ -45,7 +45,7 @@ function noBackendsError(attempts: AttemptRecord[]): GleanError {
     source: "router",
     hint:
       "exa needs no credentials and is enabled by default — check that it is present in " +
-      "search.providers. For synthesized answers, run `/login openai-codex` or `/login xai`, " +
+      "search.providers. For synthesized answers, run `/login openai-codex` or `/login grok-build`, " +
       "or set TAVILY_API_KEY / PERPLEXITY_API_KEY.\n" +
       describe(attempts),
   });

@@ -1,4 +1,22 @@
 export const XAI_PROVIDER_ID = "xai";
+
+/**
+ * The credential slot a Grok subscription actually lands in.
+ *
+ * `/login xai` and `/login grok-build` are different OAuth grants against the
+ * same client. The grok-build grant additionally carries
+ * `conversations:read`/`conversations:write`, and only that token is allowed to
+ * run the Responses search tools: with the plain `xai` token every model
+ * returns `429 resource-exhausted` at a team limit of 0/0, because those calls
+ * bill against xAI API spend rather than the subscription.
+ *
+ * Only present once that login has been completed — hence a preference,
+ * not a requirement.
+ */
+export const GROK_BUILD_PROVIDER_ID = "grok-build";
+
+/** Checked in order; the first credential found wins. */
+export const XAI_CREDENTIAL_PROVIDERS = [GROK_BUILD_PROVIDER_ID, XAI_PROVIDER_ID] as const;
 export const XAI_API_BASE = "https://api.x.ai/v1";
 
 /** Model backing the general `web_search` tool. */
