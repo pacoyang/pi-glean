@@ -67,6 +67,11 @@ without API credit gets `429 resource-exhausted` at a team rate limit of 0
 requests per minute on every model, because those calls bill against API spend
 rather than the subscription.
 
+`/login grok-build` is the verified path. The API-credit column follows from
+xAI's own error — the tier is set by historical API spend — but has not been
+tested against a funded account, so treat it as the documented behaviour rather
+than a confirmed one.
+
 Nothing else needs configuring. pi-glean registers the subscription grant itself,
 so `/login grok-build` needs no other extension installed; `XAI_API_KEY` is read
 from pi's own xAI slot and needs no login at all. The subscription wins when both
