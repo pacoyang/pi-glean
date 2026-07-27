@@ -499,7 +499,7 @@ describe("refusing an unsearched answer", () => {
         assert.equal(error.kind, "invalid-response");
         assert.match(error.message, /without performing a search/);
         // The endpoint is named so the message says which host misbehaved.
-        assert.match(error.hint ?? "", /cli-chat-proxy\.grok\.com/);
+        assert.match(error.hint ?? "", /api\.x\.ai/);
         return true;
       },
     );

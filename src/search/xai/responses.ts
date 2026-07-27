@@ -19,8 +19,9 @@ import {
   DEFAULT_X_SEARCH_MODEL,
   SEARCH_TIMEOUT_MS,
   USER_AGENT,
-  GROK_CLI_PROXY_BASE,
+  GROK_CLI_PROXY_HOST,
 } from "./constants.ts";
+import { XAI_API_VARIANT } from "./auth.ts";
 
 export interface XaiResponsesResult {
   model?: string;
@@ -55,9 +56,9 @@ export function glueCitationSpacing(text: string): string {
 export function isGrokCliProxyBaseUrl(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false;
   try {
-    return new URL(baseUrl).hostname === "cli-chat-proxy.grok.com";
+    return new URL(baseUrl).hostname === GROK_CLI_PROXY_HOST;
   } catch {
-    return baseUrl.includes("cli-chat-proxy.grok.com");
+    return baseUrl.includes(GROK_CLI_PROXY_HOST);
   }
 }
 
@@ -101,7 +102,7 @@ export async function callXaiResponses(
   body: Record<string, unknown>,
   options: XaiCallOptions = {},
 ): Promise<XaiResponsesResult> {
-  const baseUrl = (options.baseUrl ?? GROK_CLI_PROXY_BASE).replace(/\/+$/, "");
+  const baseUrl = (options.baseUrl ?? XAI_API_VARIANT.baseUrl).replace(/\/+$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? SEARCH_TIMEOUT_MS;
 
@@ -415,7 +416,10 @@ export async function runXaiWebSearch(
 
   const { text, searchCalls, annotations } = extractOutput(result);
   const citations = citationsFrom(result, text, annotations);
-  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? GROK_CLI_PROXY_BASE);
+  assertSearched(
+    { searchCalls, citations, raw: result },
+    options.baseUrl ?? XAI_API_VARIANT.baseUrl,
+  );
   return { text, searchCalls, citations, raw: result };
 }
 
@@ -444,6 +448,9 @@ export async function runXSearch(
 
   const { text, searchCalls, annotations } = extractOutput(result);
   const citations = citationsFrom(result, text, annotations);
-  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? GROK_CLI_PROXY_BASE);
+  assertSearched(
+    { searchCalls, citations, raw: result },
+    options.baseUrl ?? XAI_API_VARIANT.baseUrl,
+  );
   return { text, searchCalls, citations, raw: result };
 }

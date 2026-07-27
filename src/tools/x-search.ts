@@ -24,7 +24,7 @@ import type { ResolvedConfig } from "../config.ts";
 import { GleanError, classifyError } from "../errors.ts";
 import { formatSources } from "../search/citations.ts";
 import { CUSTOM_TYPE, generateId, storeResult } from "../storage.ts";
-import { XAI_CREDENTIAL_PROVIDERS, defaultBaseUrlFor } from "../search/xai/constants.ts";
+import { XAI_VARIANTS, baseUrlForProvider } from "../search/xai/auth.ts";
 import { runXSearch } from "../search/xai/responses.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
@@ -78,10 +78,10 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
         // a token can still be revoked mid-session.
         let apiKey: string | undefined;
         let credentialProvider = "";
-        for (const provider of XAI_CREDENTIAL_PROVIDERS) {
-          apiKey = await ctx.modelRegistry.getApiKeyForProvider(provider);
+        for (const { providerId } of XAI_VARIANTS) {
+          apiKey = await ctx.modelRegistry.getApiKeyForProvider(providerId);
           if (apiKey) {
-            credentialProvider = provider;
+            credentialProvider = providerId;
             break;
           }
         }
@@ -98,7 +98,7 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
             ...(config.search.xai.xSearchModel ? { model: config.search.xai.xSearchModel } : {}),
           },
           {
-            baseUrl: config.search.xai.baseUrl ?? defaultBaseUrlFor(credentialProvider),
+            baseUrl: config.search.xai.baseUrl ?? baseUrlForProvider(credentialProvider),
             ...(signal ? { signal } : {}),
             sessionId: sessionIdOf(ctx),
           },

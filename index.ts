@@ -21,8 +21,8 @@ import { clearCloneCache } from "./src/github/extract.ts";
 import { RateLimiter } from "./src/ratelimit.ts";
 import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
-import { GROK_BUILD_VARIANT, XAI_API_VARIANT, createXaiOAuth } from "./src/search/xai/auth.ts";
-import { XAI_CREDENTIAL_PROVIDERS } from "./src/search/xai/constants.ts";
+import { XAI_VARIANTS, createXaiOAuth } from "./src/search/xai/auth.ts";
+
 import { buildFetchTool } from "./src/tools/fetch.ts";
 import { buildGetContentTool } from "./src/tools/get-content.ts";
 import { abortPendingFetches, markSessionActive } from "./src/tools/prefetch.ts";
@@ -60,7 +60,7 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
   // Both xAI grants, so neither login depends on another extension being
   // installed. registerProvider upserts, so coexisting with an extension that
   // registers the same slot shares the credential rather than clashing.
-  for (const variant of [GROK_BUILD_VARIANT, XAI_API_VARIANT]) {
+  for (const variant of XAI_VARIANTS) {
     pi.registerProvider(variant.providerId, { oauth: createXaiOAuth(variant) });
   }
 
@@ -101,8 +101,8 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     if (!xSearchRegistered && config.tools.xSearch) {
       let hasXai = false;
       try {
-        for (const provider of XAI_CREDENTIAL_PROVIDERS) {
-          if (await ctx.modelRegistry.getApiKeyForProvider(provider)) {
+        for (const { providerId } of XAI_VARIANTS) {
+          if (await ctx.modelRegistry.getApiKeyForProvider(providerId)) {
             hasXai = true;
             break;
           }

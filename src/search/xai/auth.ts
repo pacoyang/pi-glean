@@ -23,21 +23,25 @@ const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
  * working path, and so that a credential stored by another extension using the
  * same slots is picked up rather than duplicated.
  */
-export interface XaiOAuthVariant {
+interface XaiOAuthVariant {
   providerId: string;
   name: string;
   scope: string;
   referrer: string;
+  /** Host this credential is entitled to reach. */
+  baseUrl: string;
 }
 
 const BASE_SCOPE = "openid profile email offline_access grok-cli:access api:access";
 
-export const GROK_BUILD_VARIANT: XaiOAuthVariant = {
+const GROK_BUILD_VARIANT: XaiOAuthVariant = {
   providerId: "grok-build",
   name: "xAI (Grok subscription)",
   // The conversations scopes are what unlock the search tools.
   scope: `${BASE_SCOPE} conversations:read conversations:write`,
   referrer: "grok-build",
+  // The Grok CLI proxy, which is what a subscription is provisioned for.
+  baseUrl: "https://cli-chat-proxy.grok.com/v1",
 };
 
 export const XAI_API_VARIANT: XaiOAuthVariant = {
@@ -45,7 +49,21 @@ export const XAI_API_VARIANT: XaiOAuthVariant = {
   name: "xAI (API credit)",
   scope: BASE_SCOPE,
   referrer: "pi",
+  // The public API. An XAI_API_KEY is a credential for this host and is not
+  // recognised by the proxy, so the two are not interchangeable.
+  baseUrl: "https://api.x.ai/v1",
 };
+
+/** Most capable first: only the grok-build grant can run the search tools. */
+export const XAI_VARIANTS = [GROK_BUILD_VARIANT, XAI_API_VARIANT] as const;
+
+/** Endpoint for a credential, or the public API for an unknown slot. */
+export function baseUrlForProvider(providerId: string): string {
+  return (
+    XAI_VARIANTS.find((variant) => variant.providerId === providerId)?.baseUrl ??
+    XAI_API_VARIANT.baseUrl
+  );
+}
 const DEVICE_CODE_URL = "https://auth.x.ai/oauth2/device/code";
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
 /** Refresh early so a request never starts with a token about to expire. */

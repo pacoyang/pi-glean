@@ -23,7 +23,7 @@ import { createTransport } from "./codex/transport.ts";
 import { runExaSearch } from "./exa.ts";
 import { runPerplexitySearch } from "./perplexity.ts";
 import { runTavilySearch } from "./tavily.ts";
-import { XAI_CREDENTIAL_PROVIDERS, defaultBaseUrlFor } from "./xai/constants.ts";
+import { XAI_VARIANTS, baseUrlForProvider } from "./xai/auth.ts";
 import { runXaiWebSearch } from "./xai/responses.ts";
 
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
@@ -71,8 +71,8 @@ export interface ProviderDef {
 /**
  * First xAI credential available, preferring the subscription grant.
  *
- * See XAI_CREDENTIAL_PROVIDERS: the plain `xai` token cannot run the search
- * tools on a subscription-only account, so grok-build is tried first.
+ * The slot also decides the endpoint — see XAI_VARIANTS — because an API key
+ * and a subscription token are entitled to different hosts.
  */
 export interface XaiCredential {
   token: string;
@@ -81,7 +81,7 @@ export interface XaiCredential {
 }
 
 export async function xaiCredential(ctx: ProviderContext): Promise<XaiCredential | undefined> {
-  for (const providerId of XAI_CREDENTIAL_PROVIDERS) {
+  for (const { providerId } of XAI_VARIANTS) {
     const token = await apiKeyFor(ctx, providerId);
     if (token) return { token, providerId };
   }
@@ -222,9 +222,8 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
         throw new GleanError("auth", "xAI search requires an xAI credential.", {
           source: "xai",
           hint:
-            "Run `/login grok-build` to use a Grok " +
-            "subscription. `/login xai` alone only reaches the API-billed path, which needs " +
-            "xAI API credit.",
+            "Run `/login grok-build` for a Grok subscription, or set XAI_API_KEY if you " +
+            "have xAI API credit.",
         });
       }
       const xaiConfig = ctx.config.search.xai;
@@ -236,7 +235,7 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
           ...(xaiConfig.webSearchModel ? { model: xaiConfig.webSearchModel } : {}),
         },
         {
-          baseUrl: xaiConfig.baseUrl ?? defaultBaseUrlFor(credential.providerId),
+          baseUrl: xaiConfig.baseUrl ?? baseUrlForProvider(credential.providerId),
           ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
           sessionId: ctx.sessionId ?? null,

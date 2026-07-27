@@ -54,30 +54,25 @@ Frames need no credential. Whole-video understanding is the only part that does,
 
 ### Signing in to xAI
 
-xAI issues two OAuth grants, and only one of them can run the search tools:
+Two ways in, and the difference matters more than it looks:
 
-| Login               | Extra scopes                                | Search                                                       |
-| ------------------- | ------------------------------------------- | ------------------------------------------------------------ |
-| `/login grok-build` | `conversations:read`, `conversations:write` | works on a Grok / SuperGrok subscription                     |
-| `/login xai`        | —                                           | needs xAI **API** credit; otherwise `429 resource-exhausted` |
+|                    | Grok subscription                           | xAI API key                    |
+| ------------------ | ------------------------------------------- | ------------------------------ |
+| Set up with        | `/login grok-build`                         | `XAI_API_KEY`, or `/login xai` |
+| Endpoint           | `cli-chat-proxy.grok.com`                   | `api.x.ai`                     |
+| Extra OAuth scopes | `conversations:read`, `conversations:write` | —                              |
 
-pi-glean registers both, so `/login grok-build` works on its own with nothing
-else installed, and the grok-build credential is preferred when both exist. A
-subscription lands in that slot; with the plain `xai` token every model returns
-a team rate limit of 0 requests per minute, because those calls bill against
-API spend rather than the subscription.
+The scopes are what unlock the Responses search tools. A plain `xai` credential
+without API credit gets `429 resource-exhausted` at a team rate limit of 0
+requests per minute on every model, because those calls bill against API spend
+rather than the subscription.
 
+Nothing else needs configuring. pi-glean registers the subscription grant itself,
+so `/login grok-build` needs no other extension installed; `XAI_API_KEY` is read
+from pi's own xAI slot and needs no login at all. The subscription wins when both
+are present, and each credential goes to the host it is entitled to reach. The two hosts are not interchangeable: an API key is not
+recognised by the proxy. Set `search.xai.baseUrl` to override.
 
-An `XAI_API_KEY` works too, and needs no login at all.
-
-The endpoint follows the credential, so neither kind of user has to configure
-one: a subscription goes to the Grok CLI proxy it is provisioned for, an API
-key goes to `api.x.ai`. Set `search.xai.baseUrl` to override.
-
-| Credential        | Endpoint                  | Set up with                    |
-| ----------------- | ------------------------- | ------------------------------ |
-| Grok subscription | `cli-chat-proxy.grok.com` | `/login grok-build`            |
-| xAI API key       | `api.x.ai`                | `XAI_API_KEY`, or `/login xai` |
 
 ### Known limitations
 

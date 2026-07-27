@@ -23,6 +23,10 @@ box with no credentials, and behaving identically on macOS and Linux.
 - `glean_x_search` searches X (Twitter) posts through xAI's live index. It
   registers only once xAI authentication is confirmed, so nobody is given a
   tool that can only fail.
+- xAI works from either a Grok subscription (`/login grok-build`) or an API key
+  (`XAI_API_KEY`). Both OAuth grants are registered by this extension, and each
+  credential is routed to the host it is entitled to reach — a subscription
+  cannot use `api.x.ai` and an API key is not recognised by the Grok CLI proxy.
 - Codex citations carry character offsets into the answer text, so a claim can
   be traced to the exact sentence attributed to a source.
 
