@@ -1,0 +1,4 @@
+node_modules/
+*.tgz
+.claude/
+.pi
