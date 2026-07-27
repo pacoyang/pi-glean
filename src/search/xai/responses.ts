@@ -15,6 +15,9 @@ import {
   DEFAULT_WEB_SEARCH_MODEL,
   DEFAULT_X_SEARCH_MODEL,
   SEARCH_TIMEOUT_MS,
+  GROK_CLI_CLIENT_IDENTIFIER,
+  GROK_CLI_TOKEN_AUTH,
+  GROK_CLI_VERSION,
   USER_AGENT,
   XAI_API_BASE,
 } from "./constants.ts";
@@ -46,6 +49,43 @@ const CITATION_GLUE = /((?:https?:\/\/|www\.)[^\s<>\]]+)(\[\[\d+\]\]\([^)]+\))/g
 
 export function glueCitationSpacing(text: string): string {
   return text.replace(CITATION_GLUE, "$1 $2");
+}
+
+/** True when requests should carry the Grok CLI identity rather than plain API auth. */
+export function isGrokCliProxyBaseUrl(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  try {
+    return new URL(baseUrl).hostname === "cli-chat-proxy.grok.com";
+  } catch {
+    return baseUrl.includes("cli-chat-proxy.grok.com");
+  }
+}
+
+/**
+ * Transport headers for one request.
+ *
+ * Against `api.x.ai` there is nothing to add beyond the bearer token. The CLI
+ * proxy authenticates the *client* as well, so it needs the full Grok CLI
+ * identity — without it the connection is accepted and then never answered.
+ */
+export function xaiRequestHeaders(
+  modelId: string,
+  baseUrl: string | undefined,
+  sessionId?: string | null,
+): Record<string, string> {
+  if (!isGrokCliProxyBaseUrl(baseUrl)) return { "User-Agent": USER_AGENT };
+
+  const headers: Record<string, string> = {
+    "User-Agent": `${GROK_CLI_CLIENT_IDENTIFIER}/${GROK_CLI_VERSION}`,
+    "x-grok-client-identifier": GROK_CLI_CLIENT_IDENTIFIER,
+    "x-grok-client-version": GROK_CLI_VERSION,
+    "x-grok-client-mode": "interactive",
+    "x-xai-token-auth": GROK_CLI_TOKEN_AUTH,
+    "x-authenticateresponse": "authenticate-response",
+    "x-grok-model-override": modelId,
+  };
+  if (sessionId) headers["x-grok-conv-id"] = sessionId;
+  return headers;
 }
 
 export function clampPromptCacheKey(key: string | undefined | null, max = 64): string | undefined {
@@ -84,7 +124,7 @@ export async function callXaiResponses(
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
         "Content-Type": "application/json",
-        "User-Agent": USER_AGENT,
+        ...xaiRequestHeaders(String(body.model ?? ""), baseUrl, options.sessionId),
       },
       body: JSON.stringify(body),
       signal: controller.signal,

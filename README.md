@@ -1,6 +1,6 @@
 # pi-glean
 
-Zero-config web search and URL fetching for [pi](https://github.com/earendil-works/pi) — works with no API keys, and uses your ChatGPT Plus/Pro or xAI subscription for higher-quality answers when available. Plus GitHub repos, PDFs, YouTube, and video frames.
+Zero-config web search and URL fetching for [pi](https://github.com/earendil-works/pi) — works with no API keys, and uses your ChatGPT Plus/Pro subscription or xAI API access for higher-quality answers when available. Plus GitHub repos, PDFs, YouTube, and video frames.
 
 ```bash
 pi install npm:pi-glean
@@ -32,7 +32,7 @@ That is the whole setup. Search works immediately through Exa's public MCP endpo
 | Order | Backend      | Credential                               | Returns                                               |
 | ----- | ------------ | ---------------------------------------- | ----------------------------------------------------- |
 | 1     | `codex`      | ChatGPT Plus/Pro — `/login openai-codex` | Synthesized answer, citations carry character offsets |
-| 2     | `xai`        | xAI subscription — `/login xai`          | Synthesized answer                                    |
+| 2     | `xai`        | xAI API access — `/login xai`            | Synthesized answer                                    |
 | 3     | `tavily`     | `TAVILY_API_KEY` (has a free tier)       | Synthesized answer                                    |
 | 4     | `perplexity` | `PERPLEXITY_API_KEY`                     | Synthesized answer                                    |
 | 5     | `exa`        | **none**                                 | Real page text, not a summary                         |
@@ -51,6 +51,18 @@ It also handles:
 - **Video** — frames from any local file or YouTube video via `ffmpeg`, and whole-video understanding through Gemini when `GEMINI_API_KEY` is set
 
 Frames need no credential. Whole-video understanding is the only part that does, and when it is unavailable you get the frames plus a note explaining what else was possible — never an error in place of work that succeeded.
+
+### A note on xAI
+
+`/login xai` authenticates fine against a consumer Grok subscription, but these
+models are billed as xAI **API** usage, and an account with no API spend has a
+rate-limit tier of 0 requests per minute — every search comes back `429
+resource-exhausted`. A Grok subscription alone is not enough; see
+[console.x.ai rate limits](https://console.x.ai/team/default/rate-limits).
+
+Set `search.xai.baseUrl` to `https://cli-chat-proxy.grok.com/v1` to route
+through the Grok CLI proxy instead, which pi-glean will then address with the
+Grok CLI client identity.
 
 ### Known limitations
 

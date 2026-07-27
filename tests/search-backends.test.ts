@@ -12,8 +12,10 @@ import {
   citationsFrom,
   clampPromptCacheKey,
   glueCitationSpacing,
+  isGrokCliProxyBaseUrl,
   runXSearch,
   runXaiWebSearch,
+  xaiRequestHeaders,
 } from "../src/search/xai/responses.ts";
 import { PROVIDERS } from "../src/search/providers.ts";
 import { fakeFetch, jsonResponse, providerContext, testConfig } from "./helpers/fixtures.ts";
@@ -404,5 +406,51 @@ describe("citation normalization", () => {
     );
     // First seen wins, because that position is the rank.
     assert.equal(result.citations[0]?.title, "React");
+  });
+});
+
+describe("grok cli proxy", () => {
+  it("recognises the proxy host only", () => {
+    assert.equal(isGrokCliProxyBaseUrl("https://cli-chat-proxy.grok.com/v1"), true);
+    assert.equal(isGrokCliProxyBaseUrl("https://api.x.ai/v1"), false);
+    assert.equal(isGrokCliProxyBaseUrl(undefined), false);
+    // Not a substring match on the whole URL: a path must not qualify a host.
+    assert.equal(isGrokCliProxyBaseUrl("https://evil.test/cli-chat-proxy.grok.com"), false);
+  });
+
+  it("sends the Grok CLI identity to the proxy and nothing extra to the API", async () => {
+    // Without these headers the proxy accepts the connection and never answers
+    // — observed as a five minute hang against the real endpoint, which the
+    // 300s search timeout then reported as a timeout rather than a bad request.
+    const api = xaiRequestHeaders("grok-4.20-multi-agent", "https://api.x.ai/v1", "sess-1");
+    assert.deepEqual(Object.keys(api), ["User-Agent"]);
+
+    const proxy = xaiRequestHeaders(
+      "grok-4.20-multi-agent",
+      "https://cli-chat-proxy.grok.com/v1",
+      "sess-1",
+    );
+    assert.equal(proxy["x-grok-client-identifier"], "grok-shell");
+    assert.equal(proxy["x-xai-token-auth"], "xai-grok-cli");
+    assert.equal(proxy["x-grok-model-override"], "grok-4.20-multi-agent");
+    assert.equal(proxy["x-grok-conv-id"], "sess-1");
+    assert.match(proxy["User-Agent"]!, /^grok-shell\//);
+
+    // No session means no conversation id, rather than an empty one.
+    assert.equal(
+      xaiRequestHeaders("m", "https://cli-chat-proxy.grok.com/v1")["x-grok-conv-id"],
+      undefined,
+    );
+  });
+
+  it("puts those headers on the actual request", async () => {
+    const fake = fakeFetch(() => jsonResponse({ output: [] }));
+    await runXaiWebSearch(
+      "token",
+      { query: "q" },
+      { baseUrl: "https://cli-chat-proxy.grok.com/v1", fetchImpl: fake.fetch, sessionId: "s" },
+    ).catch(() => {});
+    assert.equal(fake.requests[0]?.headers["x-grok-client-identifier"], "grok-shell");
+    assert.equal(fake.requests[0]?.headers.authorization, "Bearer token");
   });
 });
