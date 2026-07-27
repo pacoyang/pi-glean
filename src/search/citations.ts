@@ -49,3 +49,34 @@ export function dedupeCitations(citations: Citation[]): Citation[] {
   }
   return Array.from(seen.values());
 }
+
+/**
+ * The passage the model attributed to a citation.
+ *
+ * Only meaningful when the backend supplied offsets — Codex does, via
+ * `url_citation` annotations. Returns undefined rather than guessing.
+ */
+export function attributedText(answer: string, citation: Citation): string | undefined {
+  const { startIndex, endIndex } = citation;
+  if (startIndex === undefined || endIndex === undefined) return undefined;
+  if (startIndex < 0 || endIndex > answer.length || startIndex >= endIndex) return undefined;
+  return answer.slice(startIndex, endIndex);
+}
+
+/** Renders citations as a numbered source list; rank is the array position. */
+export function formatSources(citations: Citation[]): string {
+  if (citations.length === 0) return "";
+  const lines = citations.map((citation, index) => {
+    const label = citation.title ?? hostnameOf(citation.url) ?? citation.url;
+    return `${index + 1}. ${label}\n   ${citation.url}`;
+  });
+  return `**Sources**\n${lines.join("\n")}`;
+}
+
+export function hostnameOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
+}
