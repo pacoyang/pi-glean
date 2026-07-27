@@ -125,9 +125,13 @@ export async function fetchViaJina(
       return null;
     }
 
+    // Jina often returns markdown with no heading at all. Falling straight back
+    // to the full URL made every such result read as its own address in the
+    // source list; the hostname is what a reader actually recognises.
     const fallbackTitle = (() => {
       try {
-        return new URL(targetUrl).pathname.split("/").pop() || targetUrl;
+        const parsed = new URL(targetUrl);
+        return parsed.pathname.split("/").filter(Boolean).pop() || parsed.hostname;
       } catch {
         return targetUrl;
       }

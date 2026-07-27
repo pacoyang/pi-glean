@@ -198,6 +198,26 @@ describe("Jina private-host guard", () => {
     assert.equal(seen[1]?.authorization, "Bearer jina-key");
   });
 
+  it("falls back to the hostname when the markdown has no heading", async () => {
+    // Observed live on excalidraw.com: Jina returned headingless markdown for a
+    // root URL, and the title came back as the full address, so the source list
+    // read as a column of URLs.
+    const impl = (async () =>
+      new Response(`Markdown Content:\n${"content ".repeat(40)}`)) as unknown as typeof fetch;
+
+    const root = await fetchViaJina("https://excalidraw.com/", {
+      fetchImpl: impl,
+      lookup: PUBLIC_LOOKUP,
+    });
+    assert.equal(root?.title, "excalidraw.com");
+
+    const nested = await fetchViaJina("https://example.com/docs/guide", {
+      fetchImpl: impl,
+      lookup: PUBLIC_LOOKUP,
+    });
+    assert.equal(nested?.title, "guide", "a real path segment is still preferred");
+  });
+
   it("names JINA_API_KEY when the free tier is exhausted", async () => {
     const impl = (async () =>
       new Response("slow down", { status: 429 })) as unknown as typeof fetch;

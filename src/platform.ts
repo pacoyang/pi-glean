@@ -90,10 +90,21 @@ const PROBE_ARGS: Record<Binary, string[]> = {
   git: ["--version"],
 };
 
+/**
+ * Generous, because the cost of being wrong is asymmetric.
+ *
+ * A probe that times out is reported as "not installed", and the hint then
+ * tells the user to install what they already have. The five probes run
+ * concurrently, and the first execution of a large binary after installation
+ * pays macOS's verification cost — that combination exceeded a 5s budget on a
+ * real machine. The result is memoized, so this is paid at most once.
+ */
+const PROBE_TIMEOUT_MS = 20_000;
+
 async function defaultProbe(binary: Binary): Promise<boolean> {
   const { run } = await import("./exec.ts");
   try {
-    await run(binary, PROBE_ARGS[binary], { timeoutMs: 5000 });
+    await run(binary, PROBE_ARGS[binary], { timeoutMs: PROBE_TIMEOUT_MS });
     return true;
   } catch {
     return false;
