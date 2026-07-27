@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
@@ -72,6 +72,38 @@ describe("package.json", () => {
     for (const name of scriptNames) {
       const occurrences = raw.split(`"${name}":`).length - 1;
       assert.equal(occurrences, 1, `script "${name}" is declared ${occurrences} times`);
+    }
+  });
+});
+
+describe("source hygiene", () => {
+  function sourceFiles(dir: string, found: string[] = []): string[] {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) sourceFiles(path, found);
+      else if (entry.name.endsWith(".ts")) found.push(path);
+    }
+    return found;
+  }
+
+  it("contains no control bytes in any source file", () => {
+    // A stray NUL makes grep classify the file as binary, so it silently drops
+    // out of every code search — one had crept into commands.ts as a
+    // never-matches sentinel and hid the whole file from review.
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const files = [...sourceFiles(join(root, "src")), ...sourceFiles(join(root, "tests"))];
+    files.push(join(root, "index.ts"));
+
+    for (const file of files) {
+      const bytes = readFileSync(file);
+      const offset = bytes.findIndex(
+        (byte) => byte < 0x09 || (byte >= 0x0e && byte <= 0x1f) || byte === 0x7f,
+      );
+      assert.equal(
+        offset,
+        -1,
+        `${file} has a control byte (0x${bytes[offset]?.toString(16)}) at offset ${offset}`,
+      );
     }
   });
 });
