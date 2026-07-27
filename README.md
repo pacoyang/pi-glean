@@ -68,10 +68,10 @@ a team rate limit of 0 requests per minute, because those calls bill against
 API spend rather than the subscription.
 
 
-Requests go to `api.x.ai` by default. Setting `search.xai.baseUrl` to
-`https://cli-chat-proxy.grok.com/v1` routes through the Grok CLI proxy instead,
-which pi-glean then addresses with the CLI client identity — that host checks
-the client as well as the token and stalls silently without it.
+Requests go to the Grok CLI proxy (`cli-chat-proxy.grok.com`) by default, the
+the host the official Grok CLI uses — it is the route a subscription
+is entitled to. Set `search.xai.baseUrl` to `https://api.x.ai/v1` to use the
+public API instead, which needs API credit or an account on unified billing.
 
 ### Known limitations
 

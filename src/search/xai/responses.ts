@@ -19,7 +19,7 @@ import {
   DEFAULT_X_SEARCH_MODEL,
   SEARCH_TIMEOUT_MS,
   USER_AGENT,
-  XAI_API_BASE,
+  GROK_CLI_PROXY_BASE,
 } from "./constants.ts";
 
 export interface XaiResponsesResult {
@@ -101,7 +101,7 @@ export async function callXaiResponses(
   body: Record<string, unknown>,
   options: XaiCallOptions = {},
 ): Promise<XaiResponsesResult> {
-  const baseUrl = (options.baseUrl ?? XAI_API_BASE).replace(/\/+$/, "");
+  const baseUrl = (options.baseUrl ?? GROK_CLI_PROXY_BASE).replace(/\/+$/, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? SEARCH_TIMEOUT_MS;
 
@@ -415,7 +415,7 @@ export async function runXaiWebSearch(
 
   const { text, searchCalls, annotations } = extractOutput(result);
   const citations = citationsFrom(result, text, annotations);
-  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? XAI_API_BASE);
+  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? GROK_CLI_PROXY_BASE);
   return { text, searchCalls, citations, raw: result };
 }
 
@@ -444,6 +444,6 @@ export async function runXSearch(
 
   const { text, searchCalls, annotations } = extractOutput(result);
   const citations = citationsFrom(result, text, annotations);
-  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? XAI_API_BASE);
+  assertSearched({ searchCalls, citations, raw: result }, options.baseUrl ?? GROK_CLI_PROXY_BASE);
   return { text, searchCalls, citations, raw: result };
 }

@@ -10,19 +10,25 @@ export const GROK_BUILD_PROVIDER_ID = "grok-build";
  * one that can run the search tools. See auth.ts for why.
  */
 export const XAI_CREDENTIAL_PROVIDERS = [GROK_BUILD_PROVIDER_ID, XAI_PROVIDER_ID] as const;
+/** The public API. Requires either API credit or an account on unified billing. */
 export const XAI_API_BASE = "https://api.x.ai/v1";
 
 /**
- * The Grok CLI proxy, an alternative host for the same Responses API.
+ * The Grok CLI proxy — the default, and the route a subscription is entitled to.
  *
- * Not the default: `api.x.ai` serves every model, the proxy only some. It is
- * supported because the official Grok CLI uses it, and because it
- * authenticates the *client* as well as the token — without the
- * identity headers below it accepts the connection and never answers, which
- * surfaces as a five-minute hang rather than an error.
+ * Both hosts serve the same Responses API and both run the search tools with a
+ * grok-build credential, so the choice is about *entitlement*, not capability.
+ * The proxy is what the official Grok CLI uses, and it is the path a Grok
+ * subscription is provisioned for. `api.x.ai` additionally
+ * worked on a test account, but only because that account was on unified
+ * billing (`isUnifiedBillingUser`, usage booked against the `Api` product) —
+ * a subscription-only account has no reason to be entitled there, and gets the
+ * same `429 resource-exhausted` at a 0/0 team limit that a plain `xai` token
+ * gets everywhere.
  *
- * Both hosts work with a grok-build credential and both report usage cost, so
- * this is a routing preference rather than a billing one.
+ * The proxy authenticates the client as well as the token: without the identity
+ * headers in responses.ts it accepts the connection and never answers, which
+ * shows up as a five-minute stall rather than an error.
  */
 export const GROK_CLI_PROXY_BASE = "https://cli-chat-proxy.grok.com/v1";
 export const GROK_CLI_VERSION = "0.2.101";
