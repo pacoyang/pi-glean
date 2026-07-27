@@ -189,6 +189,11 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
             truncated,
             imageCount: imageCount(media),
             ...(result.duration !== undefined ? { duration: result.duration } : {}),
+            // The expanded renderer shows these; without them its video branch
+            // was unreachable and Ctrl+O revealed nothing about the request.
+            ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+            ...(options.timestamp !== undefined ? { timestamp: options.timestamp } : {}),
+            ...(options.frames !== undefined ? { frames: options.frames } : {}),
           },
         };
       }

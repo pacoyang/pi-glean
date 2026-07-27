@@ -281,6 +281,33 @@ describe("wiring", () => {
     assert.match(partial, /████░{6}] fetching/);
   });
 
+  it("surfaces the video request when expanded", () => {
+    // renderFetchResult has a branch for prompt/timestamp/frames; the tool has
+    // to populate them or Ctrl+O reveals nothing about what was asked for.
+    const [, fetchTool] = tools();
+    const rendered = shown(
+      fetchTool!.renderResult!(
+        {
+          content: [{ type: "text" as const, text: "body" }],
+          details: {
+            urlCount: 1,
+            title: "Clip",
+            totalChars: 4,
+            prompt: "what happens",
+            timestamp: "1:23-2:30",
+            frames: 6,
+          },
+        } as never,
+        { expanded: true, isPartial: false },
+        theme,
+        {} as never,
+      ) as never,
+    );
+    assert.match(rendered, /prompt: "what happens"/);
+    assert.match(rendered, /timestamp: 1:23-2:30/);
+    assert.match(rendered, /frames: 6/);
+  });
+
   it("carries the image badge through to the rendered status", () => {
     const [, fetchTool] = tools();
     const rendered = shown(
