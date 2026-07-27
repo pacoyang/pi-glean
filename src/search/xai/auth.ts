@@ -57,6 +57,38 @@ export const XAI_API_VARIANT: XaiOAuthVariant = {
 /** Most capable first: only the grok-build grant can run the search tools. */
 export const XAI_VARIANTS = [GROK_BUILD_VARIANT, XAI_API_VARIANT] as const;
 
+/** The slice of pi's registry this needs; keeps auth.ts free of provider types. */
+export interface ApiKeyLookup {
+  getApiKeyForProvider(provider: string): Promise<string | undefined> | string | undefined;
+}
+
+export interface XaiCredential {
+  token: string;
+  /** Which slot it came from — this decides the endpoint. */
+  providerId: string;
+}
+
+/**
+ * First xAI credential available, preferring the subscription grant.
+ *
+ * The slot is returned alongside the token because the two grants are entitled
+ * to different hosts.
+ */
+export async function resolveXaiCredential(
+  registry: ApiKeyLookup,
+): Promise<XaiCredential | undefined> {
+  for (const { providerId } of XAI_VARIANTS) {
+    let token: string | undefined;
+    try {
+      token = (await registry.getApiKeyForProvider(providerId)) || undefined;
+    } catch {
+      continue;
+    }
+    if (token) return { token, providerId };
+  }
+  return undefined;
+}
+
 /** Endpoint for a credential, or the public API for an unknown slot. */
 export function baseUrlForProvider(providerId: string): string {
   return (

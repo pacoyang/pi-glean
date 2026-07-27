@@ -24,7 +24,7 @@ import type { ResolvedConfig } from "../config.ts";
 import { GleanError, classifyError } from "../errors.ts";
 import { formatSources } from "../search/citations.ts";
 import { CUSTOM_TYPE, generateId, storeResult } from "../storage.ts";
-import { XAI_VARIANTS, baseUrlForProvider } from "../search/xai/auth.ts";
+import { baseUrlForProvider, resolveXaiCredential } from "../search/xai/auth.ts";
 import { runXSearch } from "../search/xai/responses.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
@@ -76,21 +76,13 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
       try {
         // Deferred registration removes the "no xAI but tool present" case, but
         // a token can still be revoked mid-session.
-        let apiKey: string | undefined;
-        let credentialProvider = "";
-        for (const { providerId } of XAI_VARIANTS) {
-          apiKey = await ctx.modelRegistry.getApiKeyForProvider(providerId);
-          if (apiKey) {
-            credentialProvider = providerId;
-            break;
-          }
-        }
-        if (!apiKey) {
+        const credential = await resolveXaiCredential(ctx.modelRegistry);
+        if (!credential) {
           throw new GleanError("auth", MISSING_XAI, { source: "xai" });
         }
 
         const result = await runXSearch(
-          apiKey,
+          credential.token,
           {
             query: params.query,
             ...(params.from_date ? { fromDate: params.from_date } : {}),
@@ -98,7 +90,7 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
             ...(config.search.xai.xSearchModel ? { model: config.search.xai.xSearchModel } : {}),
           },
           {
-            baseUrl: config.search.xai.baseUrl ?? baseUrlForProvider(credentialProvider),
+            baseUrl: config.search.xai.baseUrl ?? baseUrlForProvider(credential.providerId),
             ...(signal ? { signal } : {}),
             sessionId: sessionIdOf(ctx),
           },

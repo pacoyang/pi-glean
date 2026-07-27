@@ -21,7 +21,7 @@ import { clearCloneCache } from "./src/github/extract.ts";
 import { RateLimiter } from "./src/ratelimit.ts";
 import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
-import { XAI_VARIANTS, createXaiOAuth } from "./src/search/xai/auth.ts";
+import { XAI_VARIANTS, createXaiOAuth, resolveXaiCredential } from "./src/search/xai/auth.ts";
 
 import { buildFetchTool } from "./src/tools/fetch.ts";
 import { buildGetContentTool } from "./src/tools/get-content.ts";
@@ -101,12 +101,7 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     if (!xSearchRegistered && config.tools.xSearch) {
       let hasXai = false;
       try {
-        for (const { providerId } of XAI_VARIANTS) {
-          if (await ctx.modelRegistry.getApiKeyForProvider(providerId)) {
-            hasXai = true;
-            break;
-          }
-        }
+        hasXai = (await resolveXaiCredential(ctx.modelRegistry)) !== undefined;
       } catch {
         hasXai = false;
       }

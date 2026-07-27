@@ -12,7 +12,6 @@ import {
   citationsFrom,
   clampPromptCacheKey,
   glueCitationSpacing,
-  expandToSentence,
   isGrokCliProxyBaseUrl,
   runXSearch,
   xaiRequestHeaders,
@@ -275,13 +274,10 @@ describe("xai", () => {
     );
   });
 
-  it("recovers the supporting sentence for a bare citation URL", () => {
-    const text = "First sentence. React 19 is stable per https://react.dev/blog. Third one.";
-    const citations = citationsFrom({ citations: ["https://react.dev/blog"] }, text);
-    assert.equal(citations.length, 1);
+  it("reads the legacy top-level citations array", () => {
+    const citations = citationsFrom({ citations: ["https://react.dev/blog", ""] });
+    assert.equal(citations.length, 1, "empty entries are not citable");
     assert.equal(citations[0]?.title, "react.dev");
-    const slice = text.slice(citations[0]!.startIndex!, citations[0]!.endIndex!);
-    assert.match(slice, /React 19 is stable/);
   });
 
   it("truncates a long error body", async () => {
@@ -627,42 +623,14 @@ describe("xai citation annotations", () => {
     assert.equal(result.citations[0]?.title, "github.com");
   });
 
-  it("attributes the sentence, not the citation marker", async () => {
-    // Codex's offsets point at the prose; xAI's point at the `[[1]](url)`
-    // marker. Citation.startIndex means the same thing either way or it is
-    // useless, so the marker span is widened to the sentence it follows.
+  it("does not carry xAI's offsets over", async () => {
+    // They span the `[[1]](url)` marker, the opposite of what Codex reports.
+    // Nothing reads the field, so the honest answer is to leave it unset
+    // rather than guess a sentence boundary to make the two agree.
     const fake = fakeFetch(() => jsonResponse(annotated()));
     const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
-
-    const { startIndex, endIndex } = result.citations[0]!;
-    const attributed = result.text.slice(startIndex, endIndex);
-    assert.match(attributed, /It is confirmed on the releases page\./);
-    assert.doesNotMatch(attributed, /The answer is/, "only the sentence it annotates");
-  });
-
-  it("recovers sources from inline markers when nothing else carries them", async () => {
-    const fake = fakeFetch(() =>
-      jsonResponse({
-        output: [
-          { type: "web_search_call", status: "completed", action: { type: "search", query: "q" } },
-          {
-            type: "message",
-            content: [
-              {
-                type: "output_text",
-                text: "Answer.[[1]](https://a.test/x) More.[[2]](https://b.test/y)",
-              },
-            ],
-          },
-        ],
-        usage: { num_server_side_tools_used: 2 },
-      }),
-    );
-    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
-    assert.deepEqual(
-      result.citations.map((c) => c.url),
-      ["https://a.test/x", "https://b.test/y"],
-    );
+    assert.equal(result.citations[0]?.startIndex, undefined);
+    assert.equal(result.citations[0]?.endIndex, undefined);
   });
 
   it("still reads the legacy top-level array", async () => {
@@ -677,16 +645,6 @@ describe("xai citation annotations", () => {
     );
     const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
     assert.equal(result.citations[0]?.url, "https://legacy.test/a");
-  });
-
-  it("leaves a prose span untouched", () => {
-    // A Codex-style span already *is* the attributed text. Position alone
-    // cannot tell it from a marker — both follow a sentence end — so widening
-    // by position would swallow the sentence before every Codex citation.
-    const text = "First sentence. Second sentence here. Third.";
-    assert.deepEqual(expandToSentence(text, 16, 36), [16, 36]);
-    // Out-of-range input is returned untouched rather than silently clamped.
-    assert.deepEqual(expandToSentence(text, 5, 999), [5, 999]);
   });
 });
 

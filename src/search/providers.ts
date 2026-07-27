@@ -23,7 +23,7 @@ import { createTransport } from "./codex/transport.ts";
 import { runExaSearch } from "./exa.ts";
 import { runPerplexitySearch } from "./perplexity.ts";
 import { runTavilySearch } from "./tavily.ts";
-import { XAI_VARIANTS, baseUrlForProvider } from "./xai/auth.ts";
+import { baseUrlForProvider, resolveXaiCredential } from "./xai/auth.ts";
 import { runXaiWebSearch } from "./xai/responses.ts";
 
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
@@ -74,19 +74,6 @@ export interface ProviderDef {
  * The slot also decides the endpoint — see XAI_VARIANTS — because an API key
  * and a subscription token are entitled to different hosts.
  */
-export interface XaiCredential {
-  token: string;
-  /** Which slot it came from — this decides the endpoint. */
-  providerId: string;
-}
-
-export async function xaiCredential(ctx: ProviderContext): Promise<XaiCredential | undefined> {
-  for (const { providerId } of XAI_VARIANTS) {
-    const token = await apiKeyFor(ctx, providerId);
-    if (token) return { token, providerId };
-  }
-  return undefined;
-}
 
 async function apiKeyFor(ctx: ProviderContext, provider: string): Promise<string | undefined> {
   try {
@@ -214,10 +201,10 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
   xai: {
     synthesized: true,
     async isAvailable(ctx) {
-      return (await xaiCredential(ctx)) !== undefined;
+      return (await resolveXaiCredential(ctx.modelRegistry)) !== undefined;
     },
     async search(params, ctx) {
-      const credential = await xaiCredential(ctx);
+      const credential = await resolveXaiCredential(ctx.modelRegistry);
       if (!credential) {
         throw new GleanError("auth", "xAI search requires an xAI credential.", {
           source: "xai",
