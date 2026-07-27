@@ -60,9 +60,13 @@ rate-limit tier of 0 requests per minute — every search comes back `429
 resource-exhausted`. A Grok subscription alone is not enough; see
 [console.x.ai rate limits](https://console.x.ai/team/default/rate-limits).
 
-Set `search.xai.baseUrl` to `https://cli-chat-proxy.grok.com/v1` to route
-through the Grok CLI proxy instead, which pi-glean will then address with the
-Grok CLI client identity.
+The Grok CLI proxy (`cli-chat-proxy.grok.com`) is **not** a workaround. It
+serves only `grok-4.5` and it does not run the Responses search tools: it
+accepts a `web_search` request, ignores the tool, and returns a fluent answer
+from the model's own memory with no search call and no citation. pi-glean
+detects that and refuses the reply rather than passing an unsourced answer off
+as a search result. The Grok CLI identity headers are implemented for the day
+that endpoint gains real search support; until then, `xai` needs API access.
 
 ### Known limitations
 

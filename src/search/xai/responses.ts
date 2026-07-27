@@ -232,6 +232,36 @@ export function citationsFrom(result: XaiResponsesResult, text: string): Citatio
     });
 }
 
+/**
+ * Rejects a reply that never actually searched.
+ *
+ * Observed against `cli-chat-proxy.grok.com`, which accepts a `web_search` tool
+ * and quietly ignores it: the model answers "I'll look that up" from memory and
+ * the response carries no search call and no citation. Handing that back as a
+ * search result is the worst available outcome — it looks like an answer, has
+ * no sources, and may be entirely invented.
+ *
+ * Both signals have to be absent. A genuine search that happens to surface no
+ * citation still records the call it made.
+ */
+function assertSearched(
+  result: { searchCalls: SearchCall[]; citations: Citation[] },
+  endpoint: string,
+): void {
+  if (result.searchCalls.length > 0 || result.citations.length > 0) return;
+  throw new GleanError(
+    "invalid-response",
+    "xAI answered without performing a search — no search calls and no citations.",
+    {
+      source: "xai",
+      hint:
+        `The endpoint at ${endpoint} accepted the request but did not run the search tool, ` +
+        "so the reply is the model's own recollection rather than sourced results. " +
+        "Point search.xai.baseUrl at an endpoint that supports the Responses search tools.",
+    },
+  );
+}
+
 export async function runXaiWebSearch(
   apiKey: string,
   params: { query: string; allowedDomains?: string[]; model?: string },
@@ -258,7 +288,9 @@ export async function runXaiWebSearch(
   );
 
   const { text, searchCalls } = extractOutput(result);
-  return { text, searchCalls, citations: citationsFrom(result, text), raw: result };
+  const citations = citationsFrom(result, text);
+  assertSearched({ searchCalls, citations }, options.baseUrl ?? XAI_API_BASE);
+  return { text, searchCalls, citations, raw: result };
 }
 
 export async function runXSearch(
@@ -285,5 +317,7 @@ export async function runXSearch(
   );
 
   const { text, searchCalls } = extractOutput(result);
-  return { text, searchCalls, citations: citationsFrom(result, text), raw: result };
+  const citations = citationsFrom(result, text);
+  assertSearched({ searchCalls, citations }, options.baseUrl ?? XAI_API_BASE);
+  return { text, searchCalls, citations, raw: result };
 }

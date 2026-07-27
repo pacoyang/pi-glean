@@ -343,7 +343,12 @@ describe("x_search result shape", () => {
     globalThis.fetch = (async () =>
       new Response(
         JSON.stringify({
-          output: [{ type: "message", content: [{ type: "output_text", text: answer }] }],
+          // The search call is required: a reply carrying neither a call nor a
+          // citation is rejected as never having searched.
+          output: [
+            { type: "x_search_call", action: { type: "search", query: "q" }, status: "completed" },
+            { type: "message", content: [{ type: "output_text", text: answer }] },
+          ],
         }),
         { headers: { "content-type": "application/json" } },
       )) as never;

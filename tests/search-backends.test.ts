@@ -203,10 +203,18 @@ describe("perplexity", () => {
 });
 
 describe("xai", () => {
+  /**
+   * A well-formed reply. The search call matters: a response carrying neither a
+   * call nor a citation is rejected as never having searched, so a fixture
+   * without one would fail for reasons unrelated to what it is testing.
+   */
   function xaiResponse(text: string, citations: string[] = []) {
     return jsonResponse({
       model: "grok",
-      output: [{ type: "message", content: [{ type: "output_text", text }] }],
+      output: [
+        { type: "web_search_call", action: { type: "search", query: "q" }, status: "completed" },
+        { type: "message", content: [{ type: "output_text", text }] },
+      ],
       citations,
     });
   }
@@ -452,5 +460,63 @@ describe("grok cli proxy", () => {
     ).catch(() => {});
     assert.equal(fake.requests[0]?.headers["x-grok-client-identifier"], "grok-shell");
     assert.equal(fake.requests[0]?.headers.authorization, "Bearer token");
+  });
+});
+
+describe("refusing an unsearched answer", () => {
+  /** What cli-chat-proxy.grok.com returns: a fluent reply, no search, no sources. */
+  const UNSEARCHED = {
+    output: [
+      { type: "reasoning", content: [] },
+      {
+        type: "message",
+        content: [{ type: "output_text", text: "I'll look up the latest yt-dlp release." }],
+      },
+    ],
+  };
+
+  it("rejects a reply with no search call and no citation", async () => {
+    // The endpoint accepted a web_search tool and ignored it. Returning this as
+    // a search result gives the agent an unsourced answer from the model's own
+    // memory, presented as though it had been looked up.
+    const fake = fakeFetch(() => jsonResponse(UNSEARCHED));
+    await assert.rejects(
+      () =>
+        runXaiWebSearch(
+          "token",
+          { query: "latest yt-dlp release" },
+          { baseUrl: "https://cli-chat-proxy.grok.com/v1", fetchImpl: fake.fetch },
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof GleanError);
+        assert.equal(error.kind, "invalid-response");
+        assert.match(error.message, /without performing a search/);
+        assert.match(error.hint ?? "", /cli-chat-proxy\.grok\.com/);
+        return true;
+      },
+    );
+  });
+
+  it("applies to x_search too", async () => {
+    const fake = fakeFetch(() => jsonResponse(UNSEARCHED));
+    await assert.rejects(
+      () => runXSearch("token", { query: "pi coding agent" }, { fetchImpl: fake.fetch }),
+      /without performing a search/,
+    );
+  });
+
+  it("accepts a real search that happens to cite nothing", async () => {
+    // A recorded call is proof enough; some queries genuinely return no source.
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          { type: "web_search_call", action: { type: "search", query: "q" }, status: "completed" },
+          { type: "message", content: [{ type: "output_text", text: "An answer." }] },
+        ],
+      }),
+    );
+    const result = await runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+    assert.equal(result.text, "An answer.");
+    assert.equal(result.searchCalls.length, 1);
   });
 });
