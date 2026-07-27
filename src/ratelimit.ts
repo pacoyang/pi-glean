@@ -9,6 +9,15 @@
  * Each gets its own instance; they must not share state.
  */
 
+/**
+ * The limiters in play, passed around as one bag so a caller that only needs
+ * one does not have to know which others exist.
+ */
+export interface RateLimiters {
+  perplexity?: RateLimiter;
+  jina?: RateLimiter;
+}
+
 export interface RateLimitInfo {
   used: number;
   max: number;

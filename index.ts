@@ -21,6 +21,9 @@ import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
 import { createXaiOAuth } from "./src/search/xai/auth.ts";
 import { XAI_PROVIDER_ID } from "./src/search/xai/constants.ts";
+import { buildFetchTool } from "./src/tools/fetch.ts";
+import { buildGetContentTool } from "./src/tools/get-content.ts";
+import { abortPendingFetches, markSessionActive } from "./src/tools/prefetch.ts";
 import { buildSearchTool } from "./src/tools/search.ts";
 import { buildXSearchTool } from "./src/tools/x-search.ts";
 
@@ -37,12 +40,24 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
       ...config.search.perplexity.rateLimit,
       onUpdate: (info) => activityMonitor.updateRateLimit("perplexity", info),
     }),
+    // Jina's free tier is 20 requests a minute; wait rather than fail.
+    jina: new RateLimiter({
+      maxRequests: config.fetch.jina.apiKey ? 500 : 20,
+      windowMs: 60_000,
+      onUpdate: (info) => activityMonitor.updateRateLimit("jina", info),
+    }),
   };
 
   pi.registerProvider(XAI_PROVIDER_ID, { oauth: createXaiOAuth() });
 
   if (config.tools.search) {
     pi.registerTool(buildSearchTool(pi, { config, rateLimiters }));
+  }
+  if (config.tools.fetch) {
+    pi.registerTool(buildFetchTool(pi, { config, rateLimiters }));
+  }
+  if (config.tools.search || config.tools.fetch) {
+    pi.registerTool(buildGetContentTool(config));
   }
 
   registerStatusCommand(pi, () => config, VERSION);
@@ -60,6 +75,7 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
       else console.error(`pi-glean config error: ${message}`);
     }
 
+    markSessionActive(true);
     restoreFromSession(ctx);
 
     if (!xSearchRegistered && config.tools.xSearch) {
@@ -79,6 +95,10 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
   pi.on("session_start", async (_event, ctx) => onSessionChange(ctx));
   pi.on("session_tree", async (_event, ctx) => onSessionChange(ctx));
   pi.on("session_shutdown", async () => {
+    // Order matters: stop in-flight prefetches before clearing what they write
+    // into, so a late completion cannot resurrect a dead session's records.
+    markSessionActive(false);
+    abortPendingFetches();
     clearResults();
     activityMonitor.clear();
   });

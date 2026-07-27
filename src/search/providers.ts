@@ -14,7 +14,7 @@
 import type { ResolvedConfig } from "../config.ts";
 import { GleanError } from "../errors.ts";
 import { hasCredentialSource, resolveCredential } from "../credentials.ts";
-import type { RateLimiter } from "../ratelimit.ts";
+import type { RateLimiters } from "../ratelimit.ts";
 import type { Backend, SearchAnswer } from "./citations.ts";
 import { resolveAccountId } from "./codex/auth.ts";
 import { runCodexSearch, type Freshness, type SearchContextSize } from "./codex/responses.ts";
@@ -40,7 +40,7 @@ export interface ProviderContext {
   signal?: AbortSignal;
   /** Test seam; every backend threads it through. */
   fetchImpl?: typeof fetch;
-  rateLimiters?: { perplexity?: RateLimiter };
+  rateLimiters?: RateLimiters;
   env?: NodeJS.ProcessEnv;
 }
 

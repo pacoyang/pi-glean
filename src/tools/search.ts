@@ -20,11 +20,12 @@ import { formatSources, type Backend, type SearchAnswer } from "../search/citati
 import { PROVIDERS, type ProviderContext } from "../search/providers.ts";
 import { routeSearch } from "../search/router.ts";
 import { CUSTOM_TYPE, generateId, storeResult, type QueryResultData } from "../storage.ts";
-import type { RateLimiter } from "../ratelimit.ts";
+import type { RateLimiters } from "../ratelimit.ts";
+import { startBackgroundFetch } from "./prefetch.ts";
 
 export interface SearchToolDeps {
   config: ResolvedConfig;
-  rateLimiters?: { perplexity?: RateLimiter };
+  rateLimiters?: RateLimiters;
 }
 
 function sessionIdOf(ctx: ExtensionContext): string | null {
@@ -100,6 +101,13 @@ export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
         Type.Array(Type.String({ minLength: 1 }), {
           description:
             "xai and tavily only. Restrict results to these domains; prefix with - to exclude.",
+        }),
+      ),
+      includeContent: Type.Optional(
+        Type.Boolean({
+          description:
+            "Fetch the top cited pages in the background. The answer returns immediately; " +
+            "a follow-up message reports when the content is ready.",
         }),
       ),
     }),
@@ -200,6 +208,23 @@ export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
           `Use ${names.getContent}({ responseId: "${responseId}", offset: ${config.fetch.maxInlineChars} }) for the rest.`;
       }
 
+      // Started after the answer is assembled and deliberately not awaited: the
+      // search returns now, and the agent is woken when the pages land.
+      let contentFetchId: string | null = null;
+      if (params.includeContent) {
+        const urls = [
+          ...new Set(results.flatMap((result) => result.citations.map((c) => c.url))),
+        ].slice(0, config.search.includeContentLimit);
+        contentFetchId = startBackgroundFetch(urls, {
+          pi,
+          config,
+          ...(deps.rateLimiters ? { rateLimiters: deps.rateLimiters } : {}),
+        });
+        if (contentFetchId) {
+          text += `\n\n---\nFetching ${urls.length} cited page(s) in the background; a follow-up message will report when they are ready.`;
+        }
+      }
+
       const backends = [...new Set(results.map((r) => r.backend))];
       return {
         content: [{ type: "text" as const, text }],
@@ -208,6 +233,7 @@ export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
           queryCount: total,
           successful: results.filter((r) => r.error === null).length,
           backend: backends.length === 1 ? backends[0] : backends,
+          ...(contentFetchId ? { contentFetchId } : {}),
           // Derived from the provider table rather than stored per result.
           synthesized: backends.every(
             (b) => b !== "unknown" && PROVIDERS[b as Backend]?.synthesized,

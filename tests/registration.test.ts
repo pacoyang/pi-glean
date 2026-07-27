@@ -72,15 +72,32 @@ afterEach(async () => {
 });
 
 describe("eager registration", () => {
-  it("registers the search tool and the xai provider at load time", async () => {
+  it("registers the credential-free tools and the xai provider at load time", async () => {
+    // These three need no credential — exa answers unauthenticated and fetching
+    // needs nothing — so they belong in the first system prompt.
     const fake = fakeApi();
     await piGlean(fake.api);
     assert.deepEqual(
       fake.tools.map((t) => t.name),
-      ["glean_search"],
+      ["glean_search", "glean_fetch", "glean_get_content"],
     );
     assert.deepEqual(fake.providers, ["xai"]);
     assert.ok(fake.commands.includes("glean-status"));
+  });
+
+  it("registers get_content whenever either producer is enabled", async () => {
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      join(workspace, "home.json"),
+      JSON.stringify({ tools: { search: false } }),
+      "utf-8",
+    );
+    const fake = fakeApi();
+    await piGlean(fake.api);
+    const names = fake.tools.map((t) => t.name);
+    assert.ok(!names.includes("glean_search"));
+    assert.ok(names.includes("glean_fetch"));
+    assert.ok(names.includes("glean_get_content"), "fetch alone still needs paging");
   });
 
   it("registers the xai provider exactly once", async () => {
@@ -152,10 +169,11 @@ describe("tool name overrides", () => {
     );
     const fake = fakeApi();
     await piGlean(fake.api);
-    assert.deepEqual(
-      fake.tools.map((t) => t.name),
-      ["my_search"],
-    );
+    const names = fake.tools.map((t) => t.name);
+    assert.ok(names.includes("my_search"));
+    assert.ok(!names.includes("glean_search"), "the default name must not also be registered");
+    // Unoverridden names keep their defaults.
+    assert.ok(names.includes("glean_fetch"));
   });
 
   it("refuses to start with a name that collides with a pi builtin", async () => {
