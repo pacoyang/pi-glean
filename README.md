@@ -83,11 +83,19 @@ recognised by the proxy. Set `search.xai.baseUrl` to override.
 ### xAI model names are pinned
 
 `grok-4.20-multi-agent` for web search and `grok-4.20-0309-reasoning` for X
-search. These are not "whichever model is
-default" — the two search tools want particular models — so they are not
-discovered at runtime the way the Codex backend discovers its own. If xAI
-retires one, the failure is a plain `400 Model not found` and the error points
-at `search.xai.webSearchModel` / `search.xai.xSearchModel` to override.
+search. The Codex backend discovers its model at runtime; this one cannot, for
+two reasons:
+
+- The search tools want _particular_ models, not whichever is default, and
+  nothing in the catalog says which is which.
+- `/v1/models` does not describe what works. It lists
+  `grok-4.20-multi-agent-0309` but not the `grok-4.20-multi-agent` alias this
+  package sends and xAI accepts, and the CLI proxy advertises one model while
+  serving several.
+
+If xAI retires a name the failure is a plain `400 Model not found`, which does
+not fall through to another backend — no other backend can fix a model name —
+and `search.xai.webSearchModel` / `search.xai.xSearchModel` override it.
 
 ### Known limitations
 

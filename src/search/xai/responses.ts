@@ -146,9 +146,9 @@ export async function callXaiResponses(
           ...(unknownModel
             ? {
                 hint:
-                  "Set search.xai.webSearchModel (or xSearchModel) in pi-glean.json to a model " +
-                  'this account can use; `curl -H "Authorization: Bearer <token>" ' +
-                  "https://api.x.ai/v1/models` lists them.",
+                  "Set search.xai.webSearchModel (or xSearchModel) in pi-glean.json. Note that " +
+                  "the /v1/models listing is not authoritative — it omits working aliases — so " +
+                  "a name absent from it may still be accepted.",
               }
             : {}),
         },
