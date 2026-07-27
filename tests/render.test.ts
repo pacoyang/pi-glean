@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { buildSearchTool } from "../src/tools/search.ts";
+import { buildFetchTool } from "../src/tools/fetch.ts";
+import { buildXSearchTool } from "../src/tools/x-search.ts";
+import { testConfig } from "./helpers/fixtures.ts";
 import {
   buildErrorPlan,
   imageBadge,
@@ -195,5 +199,101 @@ describe("activity widget", () => {
     for (const line of lines) {
       assert.ok(line.length <= 70, `line too wide (${line.length}): ${line}`);
     }
+  });
+});
+
+describe("wiring", () => {
+  /** Marks each colour so the test can tell which branch produced a line. */
+  const theme = { fg: (color: string, text: string) => `<${color}>${text}` } as never;
+  const pi = {} as never;
+
+  /** Components render to lines; join them so the assertions read plainly. */
+  const shown = (component: { render(width: number): string[] }): string =>
+    component.render(120).join("\n");
+
+  function tools() {
+    const config = testConfig();
+    return [
+      buildSearchTool(pi, { config }),
+      buildFetchTool(pi, { config }),
+      buildXSearchTool(pi, config),
+    ];
+  }
+
+  it("attaches a result renderer to every tool that produces output", () => {
+    // The defect this guards: render.ts existed, was fully tested, and was
+    // imported by nothing — so none of the progress bars, image badges or
+    // expandable diagnostics ever reached a terminal.
+    for (const tool of tools()) {
+      assert.equal(typeof tool.renderResult, "function", `${tool.name} has no renderResult`);
+    }
+  });
+
+  it("renders an expandable error rather than a dead-end line", () => {
+    const [search] = tools();
+    const result = {
+      content: [{ type: "text" as const, text: "ignored" }],
+      details: {
+        error: "All search backends failed.",
+        kind: "quota",
+        hint: "Run `/login openai-codex`.",
+        extraLines: ["codex [quota]: daily limit", "exa [network]: fetch failed"],
+      },
+      isError: true,
+    };
+
+    const collapsed = shown(
+      search!.renderResult!(
+        result as never,
+        { expanded: false, isPartial: false },
+        theme,
+        {} as never,
+      ) as never,
+    );
+    const expanded = shown(
+      search!.renderResult!(
+        result as never,
+        { expanded: true, isPartial: false },
+        theme,
+        {} as never,
+      ) as never,
+    );
+
+    assert.match(collapsed, /<error>All search backends failed\. \[quota]/);
+    assert.match(collapsed, /ctrl\+o to expand/);
+    // Ctrl+O has to actually reveal something the collapsed view withheld.
+    assert.ok(expanded.length > collapsed.length);
+    assert.match(expanded, /exa \[network]: fetch failed/);
+    assert.doesNotMatch(collapsed, /exa \[network]/);
+  });
+
+  it("shows a progress bar while a result is still streaming", () => {
+    const [, fetchTool] = tools();
+    const partial = shown(
+      fetchTool!.renderResult!(
+        { content: [], details: { phase: "fetching", progress: 0.4 } } as never,
+        { expanded: false, isPartial: true },
+        theme,
+        {} as never,
+      ) as never,
+    );
+    assert.match(partial, /████░{6}] fetching/);
+  });
+
+  it("carries the image badge through to the rendered status", () => {
+    const [, fetchTool] = tools();
+    const rendered = shown(
+      fetchTool!.renderResult!(
+        {
+          content: [{ type: "text" as const, text: "body" }],
+          details: { urlCount: 1, title: "Clip", totalChars: 12, imageCount: 3, duration: 84 },
+        } as never,
+        { expanded: false, isPartial: false },
+        theme,
+        {} as never,
+      ) as never,
+    );
+    assert.match(rendered, /\[3 images]/);
+    assert.match(rendered, /1:24 total/);
   });
 });

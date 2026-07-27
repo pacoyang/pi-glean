@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { GleanError } from "../src/errors.ts";
 import { RateLimiter } from "../src/ratelimit.ts";
@@ -12,7 +15,8 @@ import {
   runXSearch,
   runXaiWebSearch,
 } from "../src/search/xai/responses.ts";
-import { fakeFetch, jsonResponse } from "./helpers/fixtures.ts";
+import { PROVIDERS } from "../src/search/providers.ts";
+import { fakeFetch, jsonResponse, providerContext, testConfig } from "./helpers/fixtures.ts";
 
 describe("exa", () => {
   const EXA_TEXT = [
@@ -308,5 +312,65 @@ describe("xai", () => {
         return true;
       },
     );
+  });
+});
+
+describe("credential probing", () => {
+  /** A credential source whose execution leaves a file behind. */
+  function tracer(marker: string) {
+    const path = join(tmpdir(), `glean-cred-probe-${marker}`);
+    rmSync(path, { force: true });
+    const config = testConfig();
+    config.search = {
+      ...config.search,
+      tavily: { apiKey: `!touch ${path} && echo secret` },
+      perplexity: { ...config.search.perplexity, apiKey: `!touch ${path} && echo secret` },
+    };
+    return {
+      path,
+      ran: () => existsSync(path),
+      ctx: providerContext({ config, env: {} as NodeJS.ProcessEnv }),
+    };
+  }
+
+  it("does not execute a credential helper just to report availability", async () => {
+    // `apiKey: "!op read ..."` spawns a process and can prompt for Touch ID.
+    // /glean-status probes every backend, and routing probes each one before
+    // trying it — neither is a reason to unlock a password manager.
+    const probe = tracer("availability");
+    try {
+      assert.equal(await PROVIDERS.tavily.isAvailable(probe.ctx), true);
+      assert.equal(await PROVIDERS.perplexity.isAvailable(probe.ctx), true);
+      assert.equal(probe.ran(), false, "the credential command was executed during a probe");
+    } finally {
+      rmSync(probe.path, { force: true });
+    }
+  });
+
+  it("does execute it when a search actually runs", async () => {
+    // The counterpart assertion: the probe must be the only thing that skips
+    // resolution, or the test above would pass on a broken resolver.
+    const probe = tracer("resolve");
+    try {
+      const { resolveCredential } = await import("../src/credentials.ts");
+      await resolveCredential({
+        provider: "tavily",
+        configuredValue: probe.ctx.config.search.tavily.apiKey,
+      });
+      assert.equal(probe.ran(), true);
+    } finally {
+      rmSync(probe.path, { force: true });
+    }
+  });
+
+  it("reports unavailable when nothing is configured", async () => {
+    const ctx = providerContext({ config: testConfig(), env: {} as NodeJS.ProcessEnv });
+    assert.equal(await PROVIDERS.tavily.isAvailable(ctx), false);
+    assert.equal(await PROVIDERS.perplexity.isAvailable(ctx), false);
+  });
+
+  it("treats exa as always available, with no credential to check", async () => {
+    const ctx = providerContext({ config: testConfig(), env: {} as NodeJS.ProcessEnv });
+    assert.equal(await PROVIDERS.exa.isAvailable(ctx), true);
   });
 });

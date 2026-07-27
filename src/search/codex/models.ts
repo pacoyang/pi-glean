@@ -101,7 +101,3 @@ export async function resolveCodexModel(
   cached = { key, model };
   return model;
 }
-
-export function clearModelCache(): void {
-  cached = undefined;
-}

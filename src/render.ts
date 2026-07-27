@@ -12,7 +12,20 @@
  * without a TUI.
  */
 
+import { Text } from "@earendil-works/pi-tui";
+import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import { formatSeconds, truncate } from "./format.ts";
+
+/**
+ * The slice of pi's Theme used here.
+ *
+ * Structural rather than imported so the plan builders below stay assertable
+ * without constructing a TUI — the colours are the last thing applied, never
+ * baked into the strings.
+ */
+export interface ThemeLike {
+  fg(color: "error" | "dim" | "muted" | "toolOutput" | "toolTitle", text: string): string;
+}
 
 const COLLAPSED_PREVIEW = 200;
 const EXPANDED_PREVIEW = 500;
@@ -152,4 +165,55 @@ export function renderSearchResult(
 ): string {
   const status = renderSearchStatus(details);
   return `${status}\n${truncate(text, expanded ? EXPANDED_PREVIEW : COLLAPSED_PREVIEW)}`;
+}
+
+/** Pulls the text blocks out of a tool result, ignoring images. */
+export function resultText(result: AgentToolResult<unknown>): string {
+  return (result.content ?? [])
+    .filter((block): block is { type: "text"; text: string } => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+}
+
+/**
+ * The single entry point the tools use.
+ *
+ * Errors go through the collapsed/expanded plan so Ctrl+O reveals the
+ * diagnostics. Upstream returned one line early on the error path, which left
+ * the shortcut toggling nothing at all — the bug this whole module exists to
+ * avoid repeating.
+ */
+export function toolResultComponent(
+  result: AgentToolResult<unknown>,
+  options: { expanded: boolean; isPartial: boolean },
+  theme: ThemeLike,
+  renderStatus: (details: never, text: string, expanded: boolean) => string,
+): Text {
+  const details = (result.details ?? {}) as ErrorDetails & { phase?: string; progress?: number };
+
+  if (options.isPartial) {
+    const phase = details.phase ?? "working";
+    return new Text(theme.fg("dim", progressBar(details.progress ?? 0, phase)), 0, 0);
+  }
+
+  const plan = buildErrorPlan(details);
+  if (plan) {
+    const rendered = renderErrorPlan(plan, options.expanded);
+    const [headline, ...rest] = rendered.split("\n");
+    return new Text(
+      [theme.fg("error", headline ?? ""), ...rest.map((line) => theme.fg("dim", line))].join("\n"),
+      0,
+      0,
+    );
+  }
+
+  const body = renderStatus(details as never, resultText(result), options.expanded);
+  const [status, ...rest] = body.split("\n");
+  return new Text(
+    [theme.fg("toolTitle", status ?? ""), ...rest.map((line) => theme.fg("toolOutput", line))].join(
+      "\n",
+    ),
+    0,
+    0,
+  );
 }

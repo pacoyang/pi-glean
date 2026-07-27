@@ -24,7 +24,6 @@ import {
 import { mkdir } from "node:fs/promises";
 import { extname, join, resolve as resolvePath, sep as pathSep } from "node:path";
 import { activityMonitor } from "../activity.ts";
-import { GleanError } from "../errors.ts";
 import { run } from "../exec.ts";
 import { formatBytes } from "../format.ts";
 import type { ExtractedContent } from "../fetch/types.ts";
@@ -174,6 +173,26 @@ interface CachedClone {
 
 const cloneCache = new Map<string, CachedClone>();
 
+/**
+ * Owner, repo and ref all become path components of the clone directory, so
+ * anything that could climb out of it has to be rejected here.
+ *
+ * The reason this is not theoretical: segments are percent-decoded, so
+ * `/o/r/tree/x%2F..%2F..%2F..%2Fetc` yields a ref of `x/../../../etc`, and
+ * `join(clonePath, owner, `${repo}@${ref}`)` then normalizes to `/etc` — which
+ * `cloneRepo` proceeds to `rmSync` recursively. A URL is attacker-controlled
+ * input in this package's threat model, so this is the boundary that matters.
+ *
+ * GitHub itself allows none of these characters in an owner or repo name, and a
+ * git ref cannot contain `..` or end in `.lock`, so nothing legitimate is lost.
+ */
+function isSafePathComponent(value: string): boolean {
+  if (!value || value === "." || value === "..") return false;
+  if (value.includes("\0")) return false;
+  // Covers `/`, `\`, and any `..` segment however it is spelled.
+  return !/[/\\]/.test(value) && !value.split(/[/\\]/).includes("..");
+}
+
 export function parseGitHubUrl(url: string): GitHubUrlInfo | null {
   let parsed: URL;
   try {
@@ -199,6 +218,7 @@ export function parseGitHubUrl(url: string): GitHubUrlInfo | null {
 
   const owner = segments[0]!;
   const repo = segments[1]!.replace(/\.git$/, "");
+  if (!isSafePathComponent(owner) || !isSafePathComponent(repo)) return null;
 
   // Issues, PRs and the wiki are prose, not code — let the HTML path have them.
   const third = segments[2]?.toLowerCase();
@@ -211,6 +231,7 @@ export function parseGitHubUrl(url: string): GitHubUrlInfo | null {
   if (segments.length < 4) return null;
 
   const ref = segments[3]!;
+  if (!isSafePathComponent(ref)) return null;
   return {
     owner,
     repo,
@@ -225,9 +246,20 @@ function cacheKey(info: GitHubUrlInfo): string {
   return info.ref ? `${info.owner}/${info.repo}@${info.ref}` : `${info.owner}/${info.repo}`;
 }
 
-function cloneDir(config: GitHubConfig, info: GitHubUrlInfo): string {
+/**
+ * Where a clone lives, or null if that would land outside the clone root.
+ *
+ * parseGitHubUrl already rejects traversal in every component. This recomputes
+ * the containment from the finished path anyway, because the consequence of
+ * being wrong is `rmSync(dir, { recursive: true })` on somebody's home
+ * directory — cheap check, catastrophic miss.
+ */
+function cloneDir(config: GitHubConfig, info: GitHubUrlInfo): string | null {
   const dirName = info.ref ? `${info.repo}@${info.ref}` : info.repo;
-  return join(config.clonePath, info.owner, dirName);
+  const root = resolvePath(config.clonePath);
+  const target = resolvePath(join(root, info.owner, dirName));
+  const prefix = root.endsWith(pathSep) ? root : root + pathSep;
+  return target.startsWith(prefix) ? target : null;
 }
 
 /**
@@ -446,6 +478,7 @@ async function cloneRepo(
   signal?: AbortSignal,
 ): Promise<string | null> {
   const localPath = cloneDir(config, info);
+  if (!localPath) return null;
   try {
     rmSync(localPath, { recursive: true, force: true });
   } catch {
@@ -613,8 +646,14 @@ export async function extractGitHub(
     return finish(await raced.clonePromise);
   }
 
+  const targetDir = cloneDir(deps.config, info);
+  if (!targetDir) {
+    activityMonitor.logError(activityId, "clone path escapes the configured clone root");
+    return null;
+  }
+
   const clonePromise = cloneRepo(info, deps.config, deps.signal);
-  cloneCache.set(key, { localPath: cloneDir(deps.config, info), clonePromise });
+  cloneCache.set(key, { localPath: targetDir, clonePromise });
 
   const localPath = await clonePromise;
   if (!localPath) {
@@ -644,9 +683,3 @@ export function clearCloneCache(): void {
   }
   cloneCache.clear();
 }
-
-export function cloneCacheSize(): number {
-  return cloneCache.size;
-}
-
-export { GleanError };

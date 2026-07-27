@@ -7,23 +7,27 @@
  * `search.fallbackOn` keys off these names, so the exact spelling matters.
  */
 
-export type GleanErrorKind =
-  | "credential"
-  | "auth"
-  | "invalid-request"
-  | "quota"
-  | "transient"
-  | "invalid-response"
-  | "network"
-  | "config"
-  | "aborted"
-  | "timeout"
-  | "schema"
-  | "missing_binary"
-  | "ssrf"
-  | "unsupported"
-  | "not_found"
-  | "unknown";
+/** The single source of truth, so config validation cannot drift from the type. */
+export const ERROR_KINDS = [
+  "credential",
+  "auth",
+  "invalid-request",
+  "quota",
+  "transient",
+  "invalid-response",
+  "network",
+  "config",
+  "aborted",
+  "timeout",
+  "schema",
+  "missing_binary",
+  "ssrf",
+  "unsupported",
+  "not_found",
+  "unknown",
+] as const;
+
+export type GleanErrorKind = (typeof ERROR_KINDS)[number];
 
 /** Kinds where retrying the same call is pointless but another backend may work. */
 export const DEFAULT_FALLBACK_ON: readonly GleanErrorKind[] = ["quota", "transient", "network"];

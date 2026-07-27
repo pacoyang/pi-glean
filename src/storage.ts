@@ -47,11 +47,26 @@ export function storeResult(id: string, data: StoredSearchData): void {
   storedResults.set(id, data);
 }
 
-export function getResult(id: string): StoredSearchData | null {
+/**
+ * Drops expired records.
+ *
+ * The TTL used to apply only on rehydrate, so within one long session nothing
+ * was ever released — every page and every synthesized answer stayed resident,
+ * and `glean_get_content` promised an expiry that never happened.
+ */
+function prune(now: number): void {
+  for (const [id, data] of storedResults) {
+    if (now - data.timestamp >= CACHE_TTL_MS) storedResults.delete(id);
+  }
+}
+
+export function getResult(id: string, now: number = Date.now()): StoredSearchData | null {
+  prune(now);
   return storedResults.get(id) ?? null;
 }
 
-export function getAllResults(): StoredSearchData[] {
+export function getAllResults(now: number = Date.now()): StoredSearchData[] {
+  prune(now);
   return Array.from(storedResults.values());
 }
 

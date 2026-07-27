@@ -65,9 +65,11 @@ export function startBackgroundFetch(urls: string[], deps: PrefetchDeps): string
       deps.pi.sendMessage(
         {
           customType: "glean-content-ready",
+          // The configured name, not the default — the whole point of
+          // toolNames is that a renamed tool still gets called.
           content:
             `Content fetched for ${succeeded}/${fetched.length} URLs [${fetchId}]. ` +
-            `Full page content is now available via glean_get_content.`,
+            `Full page content is now available via ${deps.config.toolNames.getContent}.`,
           display: true,
         },
         { triggerTurn: true },

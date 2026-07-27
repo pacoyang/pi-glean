@@ -22,6 +22,7 @@ import { routeSearch } from "../search/router.ts";
 import { CUSTOM_TYPE, generateId, storeResult, type QueryResultData } from "../storage.ts";
 import type { RateLimiters } from "../ratelimit.ts";
 import { startBackgroundFetch } from "./prefetch.ts";
+import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 export interface SearchToolDeps {
   config: ResolvedConfig;
@@ -111,6 +112,10 @@ export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
         }),
       ),
     }),
+
+    renderResult(result, options, theme: ThemeLike) {
+      return toolResultComponent(result, options, theme, renderSearchResult);
+    },
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       const total = params.queries.length;

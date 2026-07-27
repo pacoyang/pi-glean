@@ -103,6 +103,19 @@ describe("validation", () => {
     await assert.rejects(() => loadConfig({ cwd: workspace }), /search\.providers\[1\]/);
   });
 
+  it("rejects an error kind that does not exist", async () => {
+    // A typo here would simply never match a real kind, silently turning off
+    // backend fallback with nothing anywhere to say why.
+    await writeProject({ search: { fallbackOn: ["quota", "quotas"] } });
+    await assert.rejects(() => loadConfig({ cwd: workspace }), /search\.fallbackOn\[1\]/);
+  });
+
+  it("accepts the real error kinds", async () => {
+    await writeProject({ search: { fallbackOn: ["timeout", "not_found"] } });
+    const config = await loadConfig({ cwd: workspace });
+    assert.deepEqual(config.search.fallbackOn, ["timeout", "not_found"]);
+  });
+
   it("rejects a non-string entry in a string array", async () => {
     await writeProject({ youtube: { subtitleLangs: ["en", 42] } });
     await assert.rejects(() => loadConfig({ cwd: workspace }), /subtitleLangs\[1\]/);

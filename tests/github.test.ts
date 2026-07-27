@@ -74,6 +74,34 @@ describe("parseGitHubUrl", () => {
     assert.equal(parseGitHubUrl("https://github.com/onlyowner"), null);
     assert.equal(parseGitHubUrl("not a url"), null);
   });
+
+  it("refuses a percent-encoded traversal in any path component", () => {
+    // Segments are percent-decoded, and owner/repo/ref all become directory
+    // names under the clone root. `join(root, owner, `${repo}@${ref}`)` on a
+    // decoded `../../..` normalizes clean out of the root — and cloneRepo then
+    // calls rmSync(dir, { recursive: true, force: true }) on the result. A URL
+    // is attacker-controlled here, so this must never parse.
+    for (const url of [
+      "https://github.com/o/r/tree/x%2F..%2F..%2F..%2F..%2F..%2F..%2Fetc",
+      "https://github.com/..%2F..%2F..%2Fetc/r",
+      "https://github.com/o/..%2F..%2Fr",
+      "https://github.com/o/r/blob/..%2F..%2Fpasswd/x.ts",
+      "https://github.com/o/r/tree/x%5C..%5C..%5Cwindows",
+    ]) {
+      assert.equal(parseGitHubUrl(url), null, url);
+    }
+  });
+
+  it("still accepts the legitimate URLs that look similar", () => {
+    // A branch name really can contain a slash — but GitHub spells it with a
+    // literal `/`, which the path split has already separated.
+    const info = parseGitHubUrl("https://github.com/a/b/tree/feat/foo/src");
+    assert.equal(info?.ref, "feat");
+    assert.equal(info?.path, "foo/src");
+    // Dots are fine anywhere they are not a traversal.
+    assert.equal(parseGitHubUrl("https://github.com/a/b.js/tree/v1.2.3")?.repo, "b.js");
+    assert.equal(parseGitHubUrl("https://github.com/a/b/tree/release-1.0")?.ref, "release-1.0");
+  });
 });
 
 describe("resolveWithinRepo", () => {

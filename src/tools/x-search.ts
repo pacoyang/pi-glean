@@ -26,6 +26,7 @@ import { formatSources } from "../search/citations.ts";
 import { CUSTOM_TYPE, generateId, storeResult } from "../storage.ts";
 import { XAI_PROVIDER_ID } from "../search/xai/constants.ts";
 import { runXSearch } from "../search/xai/responses.ts";
+import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 const MISSING_XAI =
   "X search requires xAI. Run `/login xai`. " +
@@ -64,6 +65,10 @@ export function buildXSearchTool(pi: ExtensionAPI, config: ResolvedConfig) {
         Type.String({ description: "Only posts on or before this date (YYYY-MM-DD, UTC)." }),
       ),
     }),
+
+    renderResult(result, options, theme: ThemeLike) {
+      return toolResultComponent(result, options, theme, renderSearchResult);
+    },
 
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       try {

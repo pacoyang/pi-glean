@@ -15,7 +15,7 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import type { Backend } from "./search/citations.ts";
-import { DEFAULT_FALLBACK_ON, type GleanErrorKind } from "./errors.ts";
+import { DEFAULT_FALLBACK_ON, ERROR_KINDS, type GleanErrorKind } from "./errors.ts";
 
 export const CONFIG_FILE_NAME = "pi-glean.json";
 export type ConfigScope = "project" | "home";
@@ -306,6 +306,28 @@ function providerList(raw: Raw, origin: string, fallback: Backend[]): Backend[] 
 }
 
 /**
+ * Validated against the real kind names rather than accepted as free strings:
+ * a typo like `"quotas"` would simply never match, silently disabling fallback
+ * with nothing anywhere to explain why searches stopped degrading gracefully.
+ */
+function errorKindList(raw: Raw, origin: string, fallback: GleanErrorKind[]): GleanErrorKind[] {
+  const value = raw.fallbackOn;
+  if (value === undefined || value === null) return fallback;
+  if (!Array.isArray(value)) {
+    throw new ConfigError(`search.fallbackOn in ${origin} must be an array of strings`);
+  }
+  return value.map((entry, index) => {
+    if (typeof entry !== "string" || !(ERROR_KINDS as readonly string[]).includes(entry)) {
+      throw new ConfigError(
+        `search.fallbackOn[${index}] in ${origin} must be one of ${ERROR_KINDS.join(" | ")}, ` +
+          `got ${JSON.stringify(entry)}`,
+      );
+    }
+    return entry as GleanErrorKind;
+  });
+}
+
+/**
  * Tool names are validated hard: a duplicate or a builtin collision means a tool
  * gets silently dropped at registration time, with no warning anywhere.
  */
@@ -488,9 +510,7 @@ export async function loadConfig(options: LoadOptions): Promise<ResolvedConfig> 
         MIN_BATCH_SIZE,
         MAX_BATCH_SIZE,
       ),
-      fallbackOn: stringArray(searchRaw, "fallbackOn", origin, "search.fallbackOn", [
-        ...DEFAULT_FALLBACK_ON,
-      ]) as GleanErrorKind[],
+      fallbackOn: errorKindList(searchRaw, origin, [...DEFAULT_FALLBACK_ON]),
       includeContentLimit: num(
         searchRaw,
         "includeContentLimit",

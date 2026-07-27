@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { hasFullInlineCoverage, mediaBlocks } from "../src/tools/fetch.ts";
+import { mediaBlocks } from "../src/tools/fetch.ts";
 import type { ExtractedContent } from "../src/fetch/types.ts";
 
 function content(overrides: Partial<ExtractedContent> = {}): ExtractedContent {
@@ -10,24 +10,6 @@ function content(overrides: Partial<ExtractedContent> = {}): ExtractedContent {
 function frame(timestamp: string) {
   return { data: `data-${timestamp}`, mimeType: "image/jpeg", timestamp };
 }
-
-describe("hasFullInlineCoverage", () => {
-  it("is true only when every requested URL came back inline", () => {
-    const urls = ["https://a.test", "https://b.test"];
-    assert.equal(hasFullInlineCoverage(urls, [content({ url: "https://a.test" })]), false);
-    assert.equal(
-      hasFullInlineCoverage(urls, [
-        content({ url: "https://a.test" }),
-        content({ url: "https://b.test" }),
-      ]),
-      true,
-    );
-  });
-
-  it("is false when nothing is inline", () => {
-    assert.equal(hasFullInlineCoverage(["https://a.test"], []), false);
-  });
-});
 
 describe("mediaBlocks", () => {
   it("labels each frame with the moment it came from", () => {

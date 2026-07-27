@@ -15,20 +15,11 @@ import { normalizeFetchParams } from "../fetch/params.ts";
 import type { ExtractedContent } from "../fetch/types.ts";
 import { CUSTOM_TYPE, generateId, storeResult, stripThumbnails } from "../storage.ts";
 import type { RateLimiters } from "../ratelimit.ts";
+import { renderFetchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 export interface FetchToolDeps {
   config: ResolvedConfig;
   rateLimiters?: RateLimiters;
-}
-
-/**
- * True when every requested URL is already inline — the caller then omits the
- * `glean_get_content` pointer, saving the agent a pointless follow-up call.
- */
-export function hasFullInlineCoverage(urls: string[], inline: ExtractedContent[]): boolean {
-  if (inline.length === 0) return false;
-  const covered = new Set(inline.map((entry) => entry.url));
-  return urls.every((url) => covered.has(url));
 }
 
 /** Twelve stills is already a lot of context; beyond that the text is better. */
@@ -120,6 +111,10 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
       ),
     }),
 
+    renderResult(result, options, theme: ThemeLike) {
+      return toolResultComponent(result, options, theme, renderFetchResult);
+    },
+
     async execute(_toolCallId, params, signal, onUpdate, _ctx) {
       const { urlList, options } = normalizeFetchParams(params);
       if (urlList.length === 0) {
@@ -203,9 +198,9 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
           ? `- ${url}: Error — ${error}\n`
           : `- ${title || url} (${content.length} chars)\n`;
       }
-      if (!hasFullInlineCoverage(urlList, [])) {
-        text += `\n---\nUse ${names.getContent}({ responseId: "${responseId}", urlIndex: 0 }) to read each one.`;
-      }
+      // A multi-URL fetch never inlines the bodies, so the pointer is always
+      // needed here. The single-URL branch above adds it only when truncated.
+      text += `\n---\nUse ${names.getContent}({ responseId: "${responseId}", urlIndex: 0 }) to read each one.`;
 
       const media = mediaBlocks(results);
       return {

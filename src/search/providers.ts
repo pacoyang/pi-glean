@@ -28,6 +28,15 @@ import { runXaiWebSearch } from "./xai/responses.ts";
 
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
 
+/**
+ * How many results to ask Tavily for.
+ *
+ * Deliberately not `includeContentLimit`: that governs how many cited pages the
+ * background prefetch reads, which is a different question from how wide the
+ * search itself should be.
+ */
+const TAVILY_RESULTS = 5;
+
 /** The slice of pi's ModelRegistry this layer depends on. */
 export interface ModelRegistryLike {
   getApiKeyForProvider(provider: string): Promise<string | undefined> | string | undefined;
@@ -68,18 +77,33 @@ async function apiKeyFor(ctx: ProviderContext, provider: string): Promise<string
   }
 }
 
-async function keyedCredential(
-  ctx: ProviderContext,
-  provider: "tavily" | "perplexity",
-): Promise<string | undefined> {
+function credentialOptions(ctx: ProviderContext, provider: "tavily" | "perplexity") {
   const env = ctx.env ?? process.env;
-  const options = {
+  return {
     provider,
     configuredValue: ctx.config.search[provider].apiKey,
     environmentValue: provider === "tavily" ? env.TAVILY_API_KEY : env.PERPLEXITY_API_KEY,
     ...(ctx.env ? { environment: ctx.env } : {}),
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   };
+}
+
+/**
+ * Availability asks whether a credential is *configured*, never resolving it.
+ *
+ * `apiKey: "!op read ..."` runs a subprocess and can prompt for Touch ID.
+ * Resolving during the probe would do that on every `/glean-status`, and twice
+ * per search on the backend that then runs — once here, once in `search`.
+ */
+function hasKeyedCredential(ctx: ProviderContext, provider: "tavily" | "perplexity"): boolean {
+  return hasCredentialSource(credentialOptions(ctx, provider));
+}
+
+async function keyedCredential(
+  ctx: ProviderContext,
+  provider: "tavily" | "perplexity",
+): Promise<string | undefined> {
+  const options = credentialOptions(ctx, provider);
   if (!hasCredentialSource(options)) return undefined;
   const value = await resolveCredential(options);
   return value ?? undefined;
@@ -198,12 +222,8 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
 
   tavily: {
     synthesized: true,
-    async isAvailable(ctx) {
-      try {
-        return (await keyedCredential(ctx, "tavily")) !== undefined;
-      } catch {
-        return false;
-      }
+    isAvailable(ctx) {
+      return Promise.resolve(hasKeyedCredential(ctx, "tavily"));
     },
     async search(params, ctx) {
       const apiKey = await keyedCredential(ctx, "tavily");
@@ -214,7 +234,7 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
         });
       }
       const result = await runTavilySearch(apiKey, params.query, {
-        numResults: ctx.config.search.includeContentLimit,
+        numResults: TAVILY_RESULTS,
         ...(params.allowedDomains ? { allowedDomains: params.allowedDomains } : {}),
         ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
         ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -225,12 +245,8 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
 
   perplexity: {
     synthesized: true,
-    async isAvailable(ctx) {
-      try {
-        return (await keyedCredential(ctx, "perplexity")) !== undefined;
-      } catch {
-        return false;
-      }
+    isAvailable(ctx) {
+      return Promise.resolve(hasKeyedCredential(ctx, "perplexity"));
     },
     async search(params, ctx) {
       const apiKey = await keyedCredential(ctx, "perplexity");
@@ -269,7 +285,3 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
     },
   },
 };
-
-export function isSynthesized(backend: Backend): boolean {
-  return PROVIDERS[backend].synthesized;
-}

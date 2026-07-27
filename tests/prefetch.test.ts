@@ -118,6 +118,25 @@ describe("push model", () => {
     assert.equal(stored?.urls?.length, 1);
   });
 
+  it("names the configured tool, not the default", async () => {
+    // A renamed tool still has to be callable — pointing the agent at a name
+    // that no longer exists makes the whole prefetch unreachable.
+    const { pi, messages } = fakePi();
+    const config = testConfig();
+    config.toolNames = { ...config.toolNames, getContent: "web_get_content" };
+
+    startBackgroundFetch(["https://a.example/1"], {
+      pi,
+      config,
+      fetchImpl: htmlFetch(),
+      lookup: PUBLIC_LOOKUP,
+    });
+    await settle();
+
+    assert.match(messages[0]?.content ?? "", /web_get_content/);
+    assert.doesNotMatch(messages[0]?.content ?? "", /glean_get_content/);
+  });
+
   it("returns null for an empty URL list", () => {
     const { pi } = fakePi();
     assert.equal(

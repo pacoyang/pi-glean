@@ -46,6 +46,22 @@ describe("store and retrieve", () => {
     const ids = new Set(Array.from({ length: 200 }, () => generateId()));
     assert.equal(ids.size, 200);
   });
+
+  it("expires records within a session, not only across a restore", () => {
+    // glean_get_content tells the agent results expire after an hour. The TTL
+    // used to be applied on rehydrate only, so in one long session every page
+    // body and synthesized answer stayed resident forever.
+    const now = Date.now();
+    storeResult("fresh", searchRecord("fresh", now));
+    storeResult("stale", searchRecord("stale", now - CACHE_TTL_MS - 1));
+
+    assert.equal(getResult("stale", now), null);
+    assert.equal(getResult("fresh", now)?.id, "fresh");
+    assert.deepEqual(
+      getAllResults(now).map((result) => result.id),
+      ["fresh"],
+    );
+  });
 });
 
 describe("restoreFromSession", () => {
