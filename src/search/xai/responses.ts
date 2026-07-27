@@ -13,11 +13,11 @@ import { GleanError, classifyHttpStatus, formatHttpErrorBody } from "../../error
 import { hostnameOf, type Citation, type SearchCall } from "../citations.ts";
 import {
   DEFAULT_WEB_SEARCH_MODEL,
-  DEFAULT_X_SEARCH_MODEL,
-  SEARCH_TIMEOUT_MS,
   GROK_CLI_CLIENT_IDENTIFIER,
   GROK_CLI_TOKEN_AUTH,
   GROK_CLI_VERSION,
+  DEFAULT_X_SEARCH_MODEL,
+  SEARCH_TIMEOUT_MS,
   USER_AGENT,
   XAI_API_BASE,
 } from "./constants.ts";
@@ -51,7 +51,7 @@ export function glueCitationSpacing(text: string): string {
   return text.replace(CITATION_GLUE, "$1 $2");
 }
 
-/** True when requests should carry the Grok CLI identity rather than plain API auth. */
+/** True when the host authenticates the client as well as the token. */
 export function isGrokCliProxyBaseUrl(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false;
   try {
@@ -64,9 +64,9 @@ export function isGrokCliProxyBaseUrl(baseUrl: string | undefined): boolean {
 /**
  * Transport headers for one request.
  *
- * Against `api.x.ai` there is nothing to add beyond the bearer token. The CLI
- * proxy authenticates the *client* as well, so it needs the full Grok CLI
- * identity — without it the connection is accepted and then never answered.
+ * `api.x.ai` needs nothing beyond the bearer token. The Grok CLI proxy checks
+ * the client identity too, and silently stalls without it, so a request routed
+ * there carries the CLI's own headers.
  */
 export function xaiRequestHeaders(
   modelId: string,
@@ -202,6 +202,26 @@ export function extractOutput(result: XaiResponsesResult): {
       const call: SearchCall = {};
       if (action?.query !== undefined) call.query = action.query;
       if (action?.url !== undefined) call.url = action.url;
+      if (typeof item.status === "string") call.status = item.status;
+      searchCalls.push(call);
+      continue;
+    }
+
+    // x_search reports through `custom_tool_call` rather than `x_search_call`:
+    // the model fans out to `x_semantic_search` / `x_keyword_search`, each
+    // carrying its arguments as a JSON string. Without this every X search
+    // reported zero search calls despite making a dozen.
+    if (item.type === "custom_tool_call" && typeof item.name === "string") {
+      if (!/search/i.test(item.name)) continue;
+      const call: SearchCall = {};
+      if (typeof item.input === "string") {
+        try {
+          const args = JSON.parse(item.input) as { query?: unknown };
+          if (typeof args.query === "string") call.query = args.query;
+        } catch {
+          // A tool call we cannot read still counts as a call having happened.
+        }
+      }
       if (typeof item.status === "string") call.status = item.status;
       searchCalls.push(call);
     }

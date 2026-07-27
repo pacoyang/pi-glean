@@ -8,7 +8,44 @@
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai/oauth";
 
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
-const SCOPE = "openid profile email offline_access grok-cli:access api:access";
+
+/**
+ * The two grants xAI issues against this client, and the reason both exist.
+ *
+ * They differ only in scope and referrer, but that difference decides whether
+ * the account can run the Responses search tools at all. Verified live: with a
+ * `grok-build` token a search reports 4-12 server-side tool calls and returns
+ * sourced results; with an `xai` token every model returns
+ * `429 resource-exhausted` at a team limit of 0/0, because those calls bill
+ * against xAI API spend rather than a Grok subscription.
+ *
+ * Both are registered so a subscription and an API-credit account each have a
+ * working path, and so that a credential stored by another extension using the
+ * same slots is picked up rather than duplicated.
+ */
+export interface XaiOAuthVariant {
+  providerId: string;
+  name: string;
+  scope: string;
+  referrer: string;
+}
+
+const BASE_SCOPE = "openid profile email offline_access grok-cli:access api:access";
+
+export const GROK_BUILD_VARIANT: XaiOAuthVariant = {
+  providerId: "grok-build",
+  name: "xAI (Grok subscription)",
+  // The conversations scopes are what unlock the search tools.
+  scope: `${BASE_SCOPE} conversations:read conversations:write`,
+  referrer: "grok-build",
+};
+
+export const XAI_API_VARIANT: XaiOAuthVariant = {
+  providerId: "xai",
+  name: "xAI (API credit)",
+  scope: BASE_SCOPE,
+  referrer: "pi",
+};
 const DEVICE_CODE_URL = "https://auth.x.ai/oauth2/device/code";
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
 /** Refresh early so a request never starts with a token about to expire. */
@@ -115,15 +152,18 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function createXaiOAuth(fetchImpl: typeof fetch = fetch) {
+export function createXaiOAuth(
+  variant: XaiOAuthVariant = GROK_BUILD_VARIANT,
+  fetchImpl: typeof fetch = fetch,
+) {
   return {
-    name: "xAI (Grok/X subscription)",
+    name: variant.name,
 
     async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
       const device = await postForm(
         fetchImpl,
         DEVICE_CODE_URL,
-        { client_id: CLIENT_ID, scope: SCOPE, referrer: "pi" },
+        { client_id: CLIENT_ID, scope: variant.scope, referrer: variant.referrer },
         callbacks.signal,
       );
       if (!device.ok) throw requestFailure("device authorization", device);

@@ -21,8 +21,8 @@ import { clearCloneCache } from "./src/github/extract.ts";
 import { RateLimiter } from "./src/ratelimit.ts";
 import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
-import { createXaiOAuth } from "./src/search/xai/auth.ts";
-import { XAI_CREDENTIAL_PROVIDERS, XAI_PROVIDER_ID } from "./src/search/xai/constants.ts";
+import { GROK_BUILD_VARIANT, XAI_API_VARIANT, createXaiOAuth } from "./src/search/xai/auth.ts";
+import { XAI_CREDENTIAL_PROVIDERS } from "./src/search/xai/constants.ts";
 import { buildFetchTool } from "./src/tools/fetch.ts";
 import { buildGetContentTool } from "./src/tools/get-content.ts";
 import { abortPendingFetches, markSessionActive } from "./src/tools/prefetch.ts";
@@ -57,7 +57,12 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     }),
   };
 
-  pi.registerProvider(XAI_PROVIDER_ID, { oauth: createXaiOAuth() });
+  // Both xAI grants, so neither login depends on another extension being
+  // installed. registerProvider upserts, so coexisting with an extension that
+  // registers the same slot shares the credential rather than clashing.
+  for (const variant of [GROK_BUILD_VARIANT, XAI_API_VARIANT]) {
+    pi.registerProvider(variant.providerId, { oauth: createXaiOAuth(variant) });
+  }
 
   const getConfig = (): ResolvedConfig => config;
 

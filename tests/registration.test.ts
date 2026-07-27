@@ -81,7 +81,10 @@ describe("eager registration", () => {
       fake.tools.map((t) => t.name),
       ["glean_search", "glean_fetch", "glean_get_content"],
     );
-    assert.deepEqual(fake.providers, ["xai"]);
+    // Both xAI grants, so `/login grok-build` works without any other
+    // extension installed — that is the only grant that can run the search
+    // tools on a subscription.
+    assert.deepEqual(fake.providers, ["grok-build", "xai"]);
     assert.ok(fake.commands.includes("glean-status"));
   });
 

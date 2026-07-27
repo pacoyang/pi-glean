@@ -32,7 +32,7 @@ That is the whole setup. Search works immediately through Exa's public MCP endpo
 | Order | Backend      | Credential                               | Returns                                               |
 | ----- | ------------ | ---------------------------------------- | ----------------------------------------------------- |
 | 1     | `codex`      | ChatGPT Plus/Pro — `/login openai-codex` | Synthesized answer, citations carry character offsets |
-| 2     | `xai`        | Grok subscription — `/login grok-build`  | Synthesized answer                                    |
+| 2     | `xai`        | Grok subscription — `/login grok-build`  | Synthesized answer, citations carry offsets           |
 | 3     | `tavily`     | `TAVILY_API_KEY` (has a free tier)       | Synthesized answer                                    |
 | 4     | `perplexity` | `PERPLEXITY_API_KEY`                     | Synthesized answer                                    |
 | 5     | `exa`        | **none**                                 | Real page text, not a summary                         |
@@ -52,22 +52,26 @@ It also handles:
 
 Frames need no credential. Whole-video understanding is the only part that does, and when it is unavailable you get the frames plus a note explaining what else was possible — never an error in place of work that succeeded.
 
-### xAI needs the `grok-build` login
+### Signing in to xAI
 
-There are two xAI grants, and only one of them can run the Responses search
-tools:
+xAI issues two OAuth grants, and only one of them can run the search tools:
 
-| Login               | Extra scopes                                | Search                                                             |
-| ------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
-| `/login xai`        | —                                           | 429 `resource-exhausted` unless the account has xAI **API** credit |
-| `/login grok-build` | `conversations:read`, `conversations:write` | works on a Grok subscription                                       |
+| Login               | Extra scopes                                | Search                                                       |
+| ------------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| `/login grok-build` | `conversations:read`, `conversations:write` | works on a Grok / SuperGrok subscription                     |
+| `/login xai`        | —                                           | needs xAI **API** credit; otherwise `429 resource-exhausted` |
 
-A Grok/SuperGrok subscription lands in the `grok-build` slot. With the plain
-`xai` token every model returns a team rate limit of 0 requests per minute,
-because those calls bill against API spend rather than the subscription.
+pi-glean registers both, so `/login grok-build` works on its own with nothing
+else installed, and the grok-build credential is preferred when both exist. A
+subscription lands in that slot; with the plain `xai` token every model returns
+a team rate limit of 0 requests per minute, because those calls bill against
+API spend rather than the subscription.
 
-A `grok-build` credential is preferred automatically, with `xai` as the
-fallback.
+
+Requests go to `api.x.ai` by default. Setting `search.xai.baseUrl` to
+`https://cli-chat-proxy.grok.com/v1` routes through the Grok CLI proxy instead,
+which pi-glean then addresses with the CLI client identity — that host checks
+the client as well as the token and stalls silently without it.
 
 ### Known limitations
 

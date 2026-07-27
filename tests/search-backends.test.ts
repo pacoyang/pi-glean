@@ -15,8 +15,8 @@ import {
   expandToSentence,
   isGrokCliProxyBaseUrl,
   runXSearch,
-  runXaiWebSearch,
   xaiRequestHeaders,
+  runXaiWebSearch,
 } from "../src/search/xai/responses.ts";
 import { PROVIDERS } from "../src/search/providers.ts";
 import { fakeFetch, jsonResponse, providerContext, testConfig } from "./helpers/fixtures.ts";
@@ -427,23 +427,20 @@ describe("grok cli proxy", () => {
     assert.equal(isGrokCliProxyBaseUrl("https://evil.test/cli-chat-proxy.grok.com"), false);
   });
 
-  it("sends the Grok CLI identity to the proxy and nothing extra to the API", async () => {
-    // Without these headers the proxy accepts the connection and never answers
-    // — observed as a five minute hang against the real endpoint, which the
-    // 300s search timeout then reported as a timeout rather than a bad request.
-    const api = xaiRequestHeaders("grok-4.20-multi-agent", "https://api.x.ai/v1", "sess-1");
-    assert.deepEqual(Object.keys(api), ["User-Agent"]);
-
-    const proxy = xaiRequestHeaders(
-      "grok-4.20-multi-agent",
-      "https://cli-chat-proxy.grok.com/v1",
-      "sess-1",
+  it("sends the CLI identity to the proxy and nothing extra to the API", () => {
+    // Without these the proxy accepts the connection and never answers —
+    // observed as a five minute hang, reported as a timeout rather than as
+    // anything diagnosable.
+    assert.deepEqual(
+      Object.keys(xaiRequestHeaders("grok-4.20-multi-agent", "https://api.x.ai/v1", "s")),
+      ["User-Agent"],
     );
+
+    const proxy = xaiRequestHeaders("grok-4.5", "https://cli-chat-proxy.grok.com/v1", "sess-1");
     assert.equal(proxy["x-grok-client-identifier"], "grok-shell");
     assert.equal(proxy["x-xai-token-auth"], "xai-grok-cli");
-    assert.equal(proxy["x-grok-model-override"], "grok-4.20-multi-agent");
+    assert.equal(proxy["x-grok-model-override"], "grok-4.5");
     assert.equal(proxy["x-grok-conv-id"], "sess-1");
-    assert.match(proxy["User-Agent"]!, /^grok-shell\//);
 
     // No session means no conversation id, rather than an empty one.
     assert.equal(
@@ -452,13 +449,21 @@ describe("grok cli proxy", () => {
     );
   });
 
-  it("puts those headers on the actual request", async () => {
-    const fake = fakeFetch(() => jsonResponse({ output: [] }));
+  it("puts them on the actual request", async () => {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          { type: "web_search_call", status: "completed", action: { type: "search", query: "q" } },
+          { type: "message", content: [{ type: "output_text", text: "a" }] },
+        ],
+        usage: { num_server_side_tools_used: 1 },
+      }),
+    );
     await runXaiWebSearch(
       "token",
       { query: "q" },
       { baseUrl: "https://cli-chat-proxy.grok.com/v1", fetchImpl: fake.fetch, sessionId: "s" },
-    ).catch(() => {});
+    );
     assert.equal(fake.requests[0]?.headers["x-grok-client-identifier"], "grok-shell");
     assert.equal(fake.requests[0]?.headers.authorization, "Bearer token");
   });
@@ -482,17 +487,12 @@ describe("refusing an unsearched answer", () => {
     // memory, presented as though it had been looked up.
     const fake = fakeFetch(() => jsonResponse(UNSEARCHED));
     await assert.rejects(
-      () =>
-        runXaiWebSearch(
-          "token",
-          { query: "latest yt-dlp release" },
-          { baseUrl: "https://cli-chat-proxy.grok.com/v1", fetchImpl: fake.fetch },
-        ),
+      () => runXaiWebSearch("token", { query: "latest yt-dlp release" }, { fetchImpl: fake.fetch }),
       (error: unknown) => {
         assert.ok(error instanceof GleanError);
         assert.equal(error.kind, "invalid-response");
         assert.match(error.message, /without performing a search/);
-        assert.match(error.hint ?? "", /cli-chat-proxy\.grok\.com/);
+        assert.match(error.hint ?? "", /api\.x\.ai/);
         return true;
       },
     );
@@ -680,5 +680,64 @@ describe("xai citation annotations", () => {
     assert.deepEqual(expandToSentence(text, 16, 36), [16, 36]);
     // Out-of-range input is returned untouched rather than silently clamped.
     assert.deepEqual(expandToSentence(text, 5, 999), [5, 999]);
+  });
+});
+
+describe("x_search tool calls", () => {
+  it("counts custom_tool_call fan-out, which is how x_search reports", async () => {
+    // Live x_search never emits `x_search_call`: the model calls
+    // x_semantic_search and x_keyword_search as custom tools, so matching only
+    // the documented type reported zero searches for every X query.
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          {
+            type: "custom_tool_call",
+            name: "x_semantic_search",
+            input: '{"query":"pi coding agent","limit":"10"}',
+            status: "completed",
+          },
+          {
+            type: "custom_tool_call",
+            name: "x_keyword_search",
+            input: '{"query":"\\"pi coding agent\\" since:2026-01-01"}',
+            status: "completed",
+          },
+          // Not a search; must not be counted as one.
+          { type: "custom_tool_call", name: "code_interpreter", input: "{}", status: "completed" },
+          { type: "message", content: [{ type: "output_text", text: "Posts found." }] },
+        ],
+        usage: { num_server_side_tools_used: 2 },
+      }),
+    );
+    const result = await runXSearch(
+      "token",
+      { query: "pi coding agent" },
+      { fetchImpl: fake.fetch },
+    );
+
+    assert.equal(result.searchCalls.length, 2);
+    assert.equal(result.searchCalls[0]?.query, "pi coding agent");
+    assert.equal(result.searchCalls[0]?.status, "completed");
+  });
+
+  it("still counts a call whose arguments cannot be parsed", async () => {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          {
+            type: "custom_tool_call",
+            name: "x_keyword_search",
+            input: "not json",
+            status: "completed",
+          },
+          { type: "message", content: [{ type: "output_text", text: "Posts." }] },
+        ],
+        usage: { num_server_side_tools_used: 1 },
+      }),
+    );
+    const result = await runXSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
+    assert.equal(result.searchCalls.length, 1);
+    assert.equal(result.searchCalls[0]?.query, undefined);
   });
 });
