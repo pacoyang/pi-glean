@@ -68,10 +68,16 @@ a team rate limit of 0 requests per minute, because those calls bill against
 API spend rather than the subscription.
 
 
-Requests go to the Grok CLI proxy (`cli-chat-proxy.grok.com`) by default, the
-the host the official Grok CLI uses — it is the route a subscription
-is entitled to. Set `search.xai.baseUrl` to `https://api.x.ai/v1` to use the
-public API instead, which needs API credit or an account on unified billing.
+An `XAI_API_KEY` works too, and needs no login at all.
+
+The endpoint follows the credential, so neither kind of user has to configure
+one: a subscription goes to the Grok CLI proxy it is provisioned for, an API
+key goes to `api.x.ai`. Set `search.xai.baseUrl` to override.
+
+| Credential        | Endpoint                  | Set up with                    |
+| ----------------- | ------------------------- | ------------------------------ |
+| Grok subscription | `cli-chat-proxy.grok.com` | `/login grok-build`            |
+| xAI API key       | `api.x.ai`                | `XAI_API_KEY`, or `/login xai` |
 
 ### Known limitations
 

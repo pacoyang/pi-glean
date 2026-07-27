@@ -23,7 +23,7 @@ import { createTransport } from "./codex/transport.ts";
 import { runExaSearch } from "./exa.ts";
 import { runPerplexitySearch } from "./perplexity.ts";
 import { runTavilySearch } from "./tavily.ts";
-import { XAI_CREDENTIAL_PROVIDERS } from "./xai/constants.ts";
+import { XAI_CREDENTIAL_PROVIDERS, defaultBaseUrlFor } from "./xai/constants.ts";
 import { runXaiWebSearch } from "./xai/responses.ts";
 
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
@@ -74,10 +74,16 @@ export interface ProviderDef {
  * See XAI_CREDENTIAL_PROVIDERS: the plain `xai` token cannot run the search
  * tools on a subscription-only account, so grok-build is tried first.
  */
-export async function xaiCredential(ctx: ProviderContext): Promise<string | undefined> {
-  for (const provider of XAI_CREDENTIAL_PROVIDERS) {
-    const key = await apiKeyFor(ctx, provider);
-    if (key) return key;
+export interface XaiCredential {
+  token: string;
+  /** Which slot it came from — this decides the endpoint. */
+  providerId: string;
+}
+
+export async function xaiCredential(ctx: ProviderContext): Promise<XaiCredential | undefined> {
+  for (const providerId of XAI_CREDENTIAL_PROVIDERS) {
+    const token = await apiKeyFor(ctx, providerId);
+    if (token) return { token, providerId };
   }
   return undefined;
 }
@@ -211,8 +217,8 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
       return (await xaiCredential(ctx)) !== undefined;
     },
     async search(params, ctx) {
-      const apiKey = await xaiCredential(ctx);
-      if (!apiKey) {
+      const credential = await xaiCredential(ctx);
+      if (!credential) {
         throw new GleanError("auth", "xAI search requires an xAI credential.", {
           source: "xai",
           hint:
@@ -223,14 +229,14 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
       }
       const xaiConfig = ctx.config.search.xai;
       const result = await runXaiWebSearch(
-        apiKey,
+        credential.token,
         {
           query: params.query,
           ...(params.allowedDomains ? { allowedDomains: params.allowedDomains } : {}),
           ...(xaiConfig.webSearchModel ? { model: xaiConfig.webSearchModel } : {}),
         },
         {
-          ...(xaiConfig.baseUrl ? { baseUrl: xaiConfig.baseUrl } : {}),
+          baseUrl: xaiConfig.baseUrl ?? defaultBaseUrlFor(credential.providerId),
           ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
           sessionId: ctx.sessionId ?? null,

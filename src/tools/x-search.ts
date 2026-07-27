@@ -24,7 +24,7 @@ import type { ResolvedConfig } from "../config.ts";
 import { GleanError, classifyError } from "../errors.ts";
 import { formatSources } from "../search/citations.ts";
 import { CUSTOM_TYPE, generateId, storeResult } from "../storage.ts";
-import { XAI_CREDENTIAL_PROVIDERS } from "../search/xai/constants.ts";
+import { XAI_CREDENTIAL_PROVIDERS, defaultBaseUrlFor } from "../search/xai/constants.ts";
 import { runXSearch } from "../search/xai/responses.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
@@ -77,9 +77,13 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
         // Deferred registration removes the "no xAI but tool present" case, but
         // a token can still be revoked mid-session.
         let apiKey: string | undefined;
+        let credentialProvider = "";
         for (const provider of XAI_CREDENTIAL_PROVIDERS) {
           apiKey = await ctx.modelRegistry.getApiKeyForProvider(provider);
-          if (apiKey) break;
+          if (apiKey) {
+            credentialProvider = provider;
+            break;
+          }
         }
         if (!apiKey) {
           throw new GleanError("auth", MISSING_XAI, { source: "xai" });
@@ -94,7 +98,7 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
             ...(config.search.xai.xSearchModel ? { model: config.search.xai.xSearchModel } : {}),
           },
           {
-            ...(config.search.xai.baseUrl ? { baseUrl: config.search.xai.baseUrl } : {}),
+            baseUrl: config.search.xai.baseUrl ?? defaultBaseUrlFor(credentialProvider),
             ...(signal ? { signal } : {}),
             sessionId: sessionIdOf(ctx),
           },

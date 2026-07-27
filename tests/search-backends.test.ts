@@ -19,7 +19,13 @@ import {
   runXaiWebSearch,
 } from "../src/search/xai/responses.ts";
 import { PROVIDERS } from "../src/search/providers.ts";
-import { fakeFetch, jsonResponse, providerContext, testConfig } from "./helpers/fixtures.ts";
+import {
+  fakeFetch,
+  jsonResponse,
+  providerContext,
+  registryWith,
+  testConfig,
+} from "./helpers/fixtures.ts";
 
 describe("exa", () => {
   const EXA_TEXT = [
@@ -740,5 +746,55 @@ describe("x_search tool calls", () => {
     const result = await runXSearch("token", { query: "q" }, { fetchImpl: fake.fetch });
     assert.equal(result.searchCalls.length, 1);
     assert.equal(result.searchCalls[0]?.query, undefined);
+  });
+});
+
+describe("endpoint follows the credential", () => {
+  function ctxWith(keys: Record<string, string>, baseUrl?: string) {
+    const config = testConfig();
+    if (baseUrl) config.search = { ...config.search, xai: { baseUrl } };
+    return { config, modelRegistry: registryWith(keys) };
+  }
+
+  async function hostFor(keys: Record<string, string>, baseUrl?: string) {
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        output: [
+          { type: "web_search_call", status: "completed", action: { type: "search", query: "q" } },
+          { type: "message", content: [{ type: "output_text", text: "a" }] },
+        ],
+        usage: { num_server_side_tools_used: 1 },
+      }),
+    );
+    const ctx = providerContext({ ...ctxWith(keys, baseUrl), fetchImpl: fake.fetch });
+    await PROVIDERS.xai.search({ query: "q" }, ctx);
+    return new URL(fake.requests[0]!.url).hostname;
+  }
+
+  it("sends a subscription credential to the proxy", async () => {
+    // A Grok subscription is provisioned for the CLI proxy.
+    assert.equal(await hostFor({ "grok-build": "sub-token" }), "cli-chat-proxy.grok.com");
+  });
+
+  it("sends an API credential to the public API", async () => {
+    // An XAI_API_KEY is an api.x.ai credential; the proxy does not know it.
+    // Routing it to the subscription host would fail for reasons the user
+    // could not act on.
+    assert.equal(await hostFor({ xai: "api-key" }), "api.x.ai");
+  });
+
+  it("prefers the subscription when both exist", async () => {
+    assert.equal(
+      await hostFor({ "grok-build": "sub-token", xai: "api-key" }),
+      "cli-chat-proxy.grok.com",
+    );
+  });
+
+  it("lets an explicit baseUrl win either way", async () => {
+    assert.equal(await hostFor({ "grok-build": "t" }, "https://api.x.ai/v1"), "api.x.ai");
+    assert.equal(
+      await hostFor({ xai: "t" }, "https://cli-chat-proxy.grok.com/v1"),
+      "cli-chat-proxy.grok.com",
+    );
   });
 });
