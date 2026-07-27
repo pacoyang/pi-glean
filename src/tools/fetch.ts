@@ -18,7 +18,8 @@ import type { RateLimiters } from "../ratelimit.ts";
 import { renderFetchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 export interface FetchToolDeps {
-  config: ResolvedConfig;
+  /** Read live rather than captured — see the note in tools/search.ts. */
+  getConfig: () => ResolvedConfig;
   rateLimiters?: RateLimiters;
 }
 
@@ -66,8 +67,7 @@ function imageCount(blocks: MediaBlock[]): number {
 }
 
 export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
-  const { config } = deps;
-  const names = config.toolNames;
+  const names = deps.getConfig().toolNames;
 
   return defineTool({
     name: names.fetch,
@@ -116,6 +116,7 @@ export function buildFetchTool(pi: ExtensionAPI, deps: FetchToolDeps) {
     },
 
     async execute(_toolCallId, params, signal, onUpdate, _ctx) {
+      const config = deps.getConfig();
       const { urlList, options } = normalizeFetchParams(params);
       if (urlList.length === 0) {
         return {

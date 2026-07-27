@@ -209,6 +209,35 @@ describe("session lifecycle", () => {
     }
   });
 
+  it("does not read the project config before trust is known", async () => {
+    // Extensions load before any session exists, so project trust cannot be
+    // known yet. `.pi/pi-glean.json` can set search.codex.baseUrl — reading it
+    // unconditionally would point the user's ChatGPT credential at whatever
+    // host an untrusted repository names, simply by opening the directory.
+    // Tool names are the visible proxy: they come from the same merge.
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(join(workspace, ".pi"), { recursive: true });
+    await writeFile(
+      join(workspace, ".pi", "pi-glean.json"),
+      JSON.stringify({ toolNames: { search: "project_search" } }),
+      "utf-8",
+    );
+
+    const previous = process.cwd();
+    process.chdir(workspace);
+    try {
+      const fake = fakeApi();
+      await piGlean(fake.api);
+      assert.ok(
+        fake.tools.some((tool) => tool.name === "glean_search"),
+        "the project layer reached registration before trust was established",
+      );
+      assert.ok(!fake.tools.some((tool) => tool.name === "project_search"));
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
   it("keeps running when the project config is malformed", async () => {
     const { mkdir, writeFile } = await import("node:fs/promises");
     await mkdir(join(workspace, ".pi"), { recursive: true });

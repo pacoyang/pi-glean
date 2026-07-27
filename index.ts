@@ -32,9 +32,16 @@ import { buildXSearchTool } from "./src/tools/x-search.ts";
 export const VERSION = "0.1.0";
 
 export default async function piGlean(pi: ExtensionAPI): Promise<void> {
-  // Loaded once with defaults so the eager tools can be built; refreshed per
-  // session where cwd and project trust are known.
-  let config: ResolvedConfig = await loadConfig({ cwd: process.cwd() });
+  // The project layer is deliberately excluded here: extensions load before any
+  // session exists, so project trust is not yet knowable, and `.pi/pi-glean.json`
+  // can set `search.codex.baseUrl` — which would send the user's ChatGPT
+  // credential to whatever host an untrusted repository names. session_start
+  // reloads with the real cwd and trust decision, and every tool reads the
+  // config live, so a trusted project's settings take effect there.
+  let config: ResolvedConfig = await loadConfig({
+    cwd: process.cwd(),
+    isProjectTrusted: false,
+  });
   if (!config.enabled) return;
 
   const rateLimiters = {
@@ -52,18 +59,20 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
 
   pi.registerProvider(XAI_PROVIDER_ID, { oauth: createXaiOAuth() });
 
+  const getConfig = (): ResolvedConfig => config;
+
   if (config.tools.search) {
-    pi.registerTool(buildSearchTool(pi, { config, rateLimiters }));
+    pi.registerTool(buildSearchTool(pi, { getConfig, rateLimiters }));
   }
   if (config.tools.fetch) {
-    pi.registerTool(buildFetchTool(pi, { config, rateLimiters }));
+    pi.registerTool(buildFetchTool(pi, { getConfig, rateLimiters }));
   }
   if (config.tools.search || config.tools.fetch) {
     pi.registerTool(buildGetContentTool(config));
   }
 
-  registerStatusCommand(pi, () => config, VERSION);
-  registerResultsCommand(pi, () => config);
+  registerStatusCommand(pi, getConfig, VERSION);
+  registerResultsCommand(pi, getConfig);
   registerActivityWidget(pi, config.shortcuts.activity);
 
   let xSearchRegistered = false;
@@ -92,7 +101,7 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
         hasXai = false;
       }
       if (hasXai) {
-        pi.registerTool(buildXSearchTool(pi, config));
+        pi.registerTool(buildXSearchTool(pi, getConfig));
         xSearchRegistered = true;
       }
     }

@@ -40,8 +40,8 @@ function sessionIdOf(ctx: ExtensionContext): string | null {
   }
 }
 
-export function buildXSearchTool(pi: ExtensionAPI, config: ResolvedConfig) {
-  const names = config.toolNames;
+export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConfig) {
+  const names = getConfig().toolNames;
 
   return defineTool({
     name: names.xSearch,
@@ -71,6 +71,7 @@ export function buildXSearchTool(pi: ExtensionAPI, config: ResolvedConfig) {
     },
 
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const config = getConfig();
       try {
         // Deferred registration removes the "no xAI but tool present" case, but
         // a token can still be revoked mid-session.

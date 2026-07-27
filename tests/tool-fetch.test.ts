@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mediaBlocks } from "../src/tools/fetch.ts";
+import { buildFetchTool, mediaBlocks } from "../src/tools/fetch.ts";
+import { testConfig } from "./helpers/fixtures.ts";
 import type { ExtractedContent } from "../src/fetch/types.ts";
 
 function content(overrides: Partial<ExtractedContent> = {}): ExtractedContent {
@@ -47,5 +48,32 @@ describe("mediaBlocks", () => {
 
   it("emits nothing for an ordinary page", () => {
     assert.deepEqual(mediaBlocks([content({ content: "# Article" })]), []);
+  });
+});
+
+describe("live configuration", () => {
+  it("consults the config on every execute, not once at build time", async () => {
+    // The tool object outlives the config it was built from: pi reloads on
+    // session start and tree jump, once cwd and project trust are known.
+    // Capturing froze every tool on the startup snapshot, so a trusted
+    // project's settings never reached them.
+    let current = testConfig();
+    let reads = 0;
+    const getConfig = () => {
+      reads++;
+      return current;
+    };
+
+    const tool = buildFetchTool({} as never, { getConfig });
+    const atBuild = reads;
+
+    await tool.execute("id", { url: "" } as never, undefined, undefined, {} as never);
+    assert.ok(reads > atBuild, "execute never asked for the current config");
+
+    // And it is the replacement that is seen, not the original object.
+    current = testConfig({ fetch: { ...current.fetch, maxInlineChars: 1234 } });
+    const before = reads;
+    await tool.execute("id", { url: "" } as never, undefined, undefined, {} as never);
+    assert.ok(reads > before);
   });
 });

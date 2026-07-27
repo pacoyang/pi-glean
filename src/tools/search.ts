@@ -25,7 +25,16 @@ import { startBackgroundFetch } from "./prefetch.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
 export interface SearchToolDeps {
-  config: ResolvedConfig;
+  /**
+   * Read live, not captured.
+   *
+   * The tool object outlives the config it was built from: pi reloads the
+   * config on every session start and tree jump, once `cwd` and project trust
+   * are actually known. A captured reference would freeze the tool on the
+   * startup snapshot — including the project layer read before trust was
+   * established.
+   */
+  getConfig: () => ResolvedConfig;
   rateLimiters?: RateLimiters;
 }
 
@@ -56,8 +65,11 @@ export function duplicateQueries(results: QueryResultData[]): Set<string> {
 }
 
 export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
-  const { config } = deps;
-  const names = config.toolNames;
+  // Names and the parameter schema are fixed once pi registers the tool, so
+  // they can only come from the config as it stands now. Everything the execute
+  // path reads is fetched live below.
+  const registration = deps.getConfig();
+  const names = registration.toolNames;
 
   return defineTool({
     name: names.search,
@@ -78,8 +90,8 @@ export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
     parameters: Type.Object({
       queries: Type.Array(Type.String({ minLength: 1 }), {
         minItems: 1,
-        maxItems: config.search.batchSize,
-        description: `One or more search queries run in parallel (max ${config.search.batchSize}).`,
+        maxItems: registration.search.batchSize,
+        description: `One or more search queries run in parallel (max ${registration.search.batchSize}).`,
       }),
       backend: Type.Optional(
         StringEnum(["auto", "codex", "xai", "tavily", "perplexity", "exa"] as const, {
@@ -118,6 +130,7 @@ export function buildSearchTool(pi: ExtensionAPI, deps: SearchToolDeps) {
     },
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
+      const config = deps.getConfig();
       const total = params.queries.length;
       let completed = 0;
 

@@ -213,10 +213,11 @@ describe("wiring", () => {
 
   function tools() {
     const config = testConfig();
+    const getConfig = () => config;
     return [
-      buildSearchTool(pi, { config }),
-      buildFetchTool(pi, { config }),
-      buildXSearchTool(pi, config),
+      buildSearchTool(pi, { getConfig }),
+      buildFetchTool(pi, { getConfig }),
+      buildXSearchTool(pi, getConfig),
     ];
   }
 
