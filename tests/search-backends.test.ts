@@ -756,3 +756,42 @@ describe("endpoint follows the credential", () => {
     );
   });
 });
+
+describe("pinned model names", () => {
+  it("points at the config override when xAI retires a model", async () => {
+    // The names are pinned because the search tools need specific models, not
+    // whichever is default. That makes an upstream rename our problem, so the
+    // error has to name the way out — falling back to another backend cannot
+    // fix a model name.
+    const fake = fakeFetch(
+      () =>
+        new Response(
+          JSON.stringify({ code: "invalid-argument", error: "Model not found: grok-9" }),
+          {
+            status: 400,
+          },
+        ),
+    );
+    await assert.rejects(
+      () => runXaiWebSearch("token", { query: "q", model: "grok-9" }, { fetchImpl: fake.fetch }),
+      (error: unknown) => {
+        assert.ok(error instanceof GleanError);
+        assert.equal(error.kind, "invalid-request");
+        assert.match(error.hint ?? "", /search\.xai\.webSearchModel/);
+        return true;
+      },
+    );
+  });
+
+  it("says nothing extra about models on an unrelated failure", async () => {
+    const fake = fakeFetch(() => new Response("upstream exploded", { status: 500 }));
+    await assert.rejects(
+      () => runXaiWebSearch("token", { query: "q" }, { fetchImpl: fake.fetch }),
+      (error: unknown) => {
+        assert.ok(error instanceof GleanError);
+        assert.equal(error.hint, undefined);
+        return true;
+      },
+    );
+  });
+});

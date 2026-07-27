@@ -80,6 +80,15 @@ are present, and each credential goes to the host it is entitled to reach. The t
 recognised by the proxy. Set `search.xai.baseUrl` to override.
 
 
+### xAI model names are pinned
+
+`grok-4.20-multi-agent` for web search and `grok-4.20-0309-reasoning` for X
+search. These are not "whichever model is
+default" — the two search tools want particular models — so they are not
+discovered at runtime the way the Codex backend discovers its own. If xAI
+retires one, the failure is a plain `400 Model not found` and the error points
+at `search.xai.webSearchModel` / `search.xai.xSearchModel` to override.
+
 ### Known limitations
 
 - **Branch names containing a slash.** In `github.com/o/r/blob/feat/x/src/a.ts` there is no way to tell from the URL alone where the branch ends and the path begins. The clone succeeds but the file may not be found; fetch the repository root and navigate from there. The error message says so when it happens.

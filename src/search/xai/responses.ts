@@ -133,10 +133,25 @@ export async function callXaiResponses(
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
+      // Model names are pinned rather than discovered — the search tools need
+      // specific ones, not whichever is default — so a rename upstream shows up
+      // here and the way out is a config override, not a different backend.
+      const unknownModel = /model not found/i.test(text);
       throw new GleanError(
         classifyHttpStatus(response.status),
         `xAI Responses API HTTP ${response.status}: ${formatHttpErrorBody(text)}`,
-        { status: response.status, source: "xai" },
+        {
+          status: response.status,
+          source: "xai",
+          ...(unknownModel
+            ? {
+                hint:
+                  "Set search.xai.webSearchModel (or xSearchModel) in pi-glean.json to a model " +
+                  'this account can use; `curl -H "Authorization: Bearer <token>" ' +
+                  "https://api.x.ai/v1/models` lists them.",
+              }
+            : {}),
+        },
       );
     }
     return (await response.json()) as XaiResponsesResult;
