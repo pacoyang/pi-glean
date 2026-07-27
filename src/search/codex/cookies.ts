@@ -76,10 +76,6 @@ export class CloudflareCookieStore {
 
 const SHARED_STORE = new CloudflareCookieStore();
 
-export function getCookieStore(): CloudflareCookieStore {
-  return SHARED_STORE;
-}
-
 function readSetCookie(response: Response): string[] {
   const modern = response.headers.getSetCookie?.();
   if (modern) return modern;
