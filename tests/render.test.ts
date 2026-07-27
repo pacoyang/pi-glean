@@ -298,3 +298,65 @@ describe("wiring", () => {
     assert.match(rendered, /1:24 total/);
   });
 });
+
+describe("x_search result shape", () => {
+  const theme = { fg: (_color: string, text: string) => text } as never;
+
+  /** Drives the real tool with a stubbed xAI response. */
+  async function run(answer: string) {
+    const config = testConfig();
+    const pi = { appendEntry() {} } as never;
+    const tool = buildXSearchTool(pi, () => config);
+    const ctx = {
+      modelRegistry: { getApiKeyForProvider: () => "xai-key" },
+      sessionManager: { getSessionId: () => "s1" },
+    } as never;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          output: [{ type: "message", content: [{ type: "output_text", text: answer }] }],
+        }),
+        { headers: { "content-type": "application/json" } },
+      )) as never;
+    try {
+      return await tool.execute(
+        "id",
+        { query: "pi coding agent" } as never,
+        undefined,
+        undefined,
+        ctx,
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }
+
+  it("reports one query rather than none", async () => {
+    // The shared search renderer prints "n/m queries"; with those fields unset
+    // an x_search result headlined as "0/0 queries via xai".
+    const result = await run("Some discussion on X.");
+    assert.equal((result.details as { queryCount?: number }).queryCount, 1);
+
+    const rendered = (
+      buildXSearchTool({ appendEntry() {} } as never, () => testConfig()).renderResult!(
+        result as never,
+        { expanded: false, isPartial: false },
+        theme,
+        {} as never,
+      ) as unknown as { render(width: number): string[] }
+    )
+      .render(120)
+      .join("\n");
+    assert.match(rendered, /1\/1 queries via xai/);
+  });
+
+  it("caps a very long answer and points at the stored copy", async () => {
+    const result = await run("x".repeat(80_000));
+    const text = (result.content[0] as { text: string }).text;
+    assert.ok(text.length < 80_000, "an unbounded X answer went straight into the context");
+    assert.match(text, /glean_get_content/);
+    assert.equal((result.details as { truncated?: boolean }).truncated, true);
+  });
+});

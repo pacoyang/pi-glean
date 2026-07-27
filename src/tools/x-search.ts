@@ -114,15 +114,31 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
         pi.appendEntry(CUSTOM_TYPE, data);
 
         const sources = formatSources(result.citations);
+        let text = sources ? `${result.text}\n\n${sources}` : result.text;
+
+        // Capped like the other producers. A busy topic on X returns a lot, and
+        // the result is stored anyway — without this the agent had no way to
+        // page it and no protection from a very large answer.
+        const fullLength = text.length;
+        const truncated = fullLength > config.fetch.maxInlineChars;
+        if (truncated) {
+          text =
+            `${text.slice(0, config.fetch.maxInlineChars)}\n\n[Truncated]\n` +
+            `Use ${names.getContent}({ responseId: "${responseId}", offset: ${config.fetch.maxInlineChars} }) for the rest.`;
+        }
+
         return {
-          content: [
-            { type: "text" as const, text: sources ? `${result.text}\n\n${sources}` : result.text },
-          ],
+          content: [{ type: "text" as const, text }],
           details: {
             responseId,
             backend: "xai",
             corpus: "x",
             citationCount: result.citations.length,
+            // One query, stated plainly: the shared search renderer reports
+            // "n/m queries", and omitting these rendered it as "0/0 queries".
+            queryCount: 1,
+            successful: 1,
+            truncated,
           },
         };
       } catch (error) {
