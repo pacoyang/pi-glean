@@ -222,6 +222,19 @@ export async function extractUrl(
     return failure(url, error instanceof Error ? error.message : String(error));
   }
 
+  // GitHub code URLs are worth cloning rather than scraping: the agent gets a
+  // real tree and a path it can read and grep. Non-code pages (issues, wiki)
+  // return null here and fall through to the HTML path.
+  if (config.github.enabled) {
+    const { extractGitHub } = await import("../github/extract.ts");
+    const repo = await extractGitHub(url, {
+      config: config.github,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.forceClone !== undefined ? { forceClone: options.forceClone } : {}),
+    });
+    if (repo) return repo;
+  }
+
   const direct = await extractViaHttp(url, deps, options);
   if (!direct.error) return direct;
   if (NON_RECOVERABLE.some((prefix) => direct.error!.startsWith(prefix))) return direct;

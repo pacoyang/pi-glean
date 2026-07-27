@@ -57,13 +57,21 @@ export function titleFromUrl(url: string): string {
   }
 }
 
+/**
+ * Reduces a title to a safe filename.
+ *
+ * Everything outside `[A-Za-z0-9_-. ]` becomes a dash, which removes path
+ * separators; leading dots are then stripped so a title like `../../etc/passwd`
+ * cannot produce a dotfile or anything resembling a traversal.
+ */
 export function sanitizeFilename(name: string): string {
   return (
     name
       .replace(/[^\w\-. ]+/g, "-")
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
+      .replace(/^[-.]+/, "")
+      .replace(/[-.]+$/, "")
       .slice(0, 120) || "document"
   );
 }

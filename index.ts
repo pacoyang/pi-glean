@@ -15,7 +15,9 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { isProjectTrustedContext, loadConfig, type ResolvedConfig } from "./src/config.ts";
-import { registerStatusCommand } from "./src/commands.ts";
+import { registerResultsCommand, registerStatusCommand } from "./src/commands.ts";
+import { registerActivityWidget } from "./src/widget.ts";
+import { clearCloneCache } from "./src/github/extract.ts";
 import { RateLimiter } from "./src/ratelimit.ts";
 import { activityMonitor } from "./src/activity.ts";
 import { clearResults, restoreFromSession } from "./src/storage.ts";
@@ -61,6 +63,8 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
   }
 
   registerStatusCommand(pi, () => config, VERSION);
+  registerResultsCommand(pi, () => config);
+  registerActivityWidget(pi, config.shortcuts.activity);
 
   let xSearchRegistered = false;
 
@@ -76,6 +80,8 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     }
 
     markSessionActive(true);
+    // Clones belong to the branch that made them; a tree jump invalidates them.
+    clearCloneCache();
     restoreFromSession(ctx);
 
     if (!xSearchRegistered && config.tools.xSearch) {
@@ -100,6 +106,7 @@ export default async function piGlean(pi: ExtensionAPI): Promise<void> {
     markSessionActive(false);
     abortPendingFetches();
     clearResults();
+    clearCloneCache();
     activityMonitor.clear();
   });
 }
