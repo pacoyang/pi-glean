@@ -232,12 +232,19 @@ export function parseGitHubUrl(url: string): GitHubUrlInfo | null {
 
   const ref = segments[3]!;
   if (!isSafePathComponent(ref)) return null;
+
+  // `new URL` collapses a literal `..`, but a `%2F`-encoded one survives to be
+  // decoded above — and the in-repo path is also interpolated into `gh api`
+  // routes, where a `..` walks up out of the repository.
+  const pathSegments = segments.slice(4);
+  if (pathSegments.some((segment) => !isSafePathComponent(segment))) return null;
+
   return {
     owner,
     repo,
     ref,
     refIsFullSha: /^[0-9a-f]{40}$/.test(ref),
-    path: segments.slice(4).join("/"),
+    path: pathSegments.join("/"),
     type: action,
   };
 }

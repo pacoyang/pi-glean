@@ -15,6 +15,28 @@ import { detectBinary } from "../platform.ts";
 
 const GH_TIMEOUT_MS = 20_000;
 
+/**
+ * Percent-encodes a value going into a `gh api` route.
+ *
+ * These routes are strings, and `gh` hands them to a client that normalizes the
+ * path — so a `..` segment reaching this layer walks *up* the API, turning
+ * `repos/o/r/contents/../../../user` into a call to `/user` as the
+ * authenticated account. `new URL` collapses a literal `..` in the source URL,
+ * but a `%2F`-encoded one survives to be decoded by the parser, so encoding
+ * here is the reliable place to stop it.
+ */
+function encodeRoutePath(value: string): string {
+  return value
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map(encodeURIComponent)
+    .join("/");
+}
+
+function encodeRef(ref: string): string {
+  return encodeURIComponent(ref);
+}
+
 export interface GitHubUrlInfo {
   owner: string;
   repo: string;
@@ -48,7 +70,8 @@ export async function isGhAvailable(): Promise<boolean> {
 export async function repoSizeKb(owner: string, repo: string): Promise<number | null> {
   if (!(await isGhAvailable())) return null;
   try {
-    const { stdout } = await runText("gh", ["api", `repos/${owner}/${repo}`, "--jq", ".size"], {
+    const route = `repos/${encodeRoutePath(owner)}/${encodeRoutePath(repo)}`;
+    const { stdout } = await runText("gh", ["api", route, "--jq", ".size"], {
       timeoutMs: GH_TIMEOUT_MS,
     });
     const size = Number(stdout.trim());
@@ -75,7 +98,7 @@ export async function fetchTree(
 ): Promise<string[] | null> {
   const out = await ghJq([
     "api",
-    `repos/${owner}/${repo}/git/trees/${ref}?recursive=1`,
+    `repos/${encodeRoutePath(owner)}/${encodeRoutePath(repo)}/git/trees/${encodeRef(ref)}?recursive=1`,
     "--jq",
     ".tree[].path",
   ]);
@@ -88,8 +111,8 @@ export async function fetchReadme(
   repo: string,
   ref?: string,
 ): Promise<string | null> {
-  const path = ref ? `repos/${owner}/${repo}/readme?ref=${ref}` : `repos/${owner}/${repo}/readme`;
-  const out = await ghJq(["api", path, "--jq", ".content"]);
+  const base = `repos/${encodeRoutePath(owner)}/${encodeRoutePath(repo)}/readme`;
+  const out = await ghJq(["api", ref ? `${base}?ref=${encodeRef(ref)}` : base, "--jq", ".content"]);
   if (!out) return null;
   try {
     return Buffer.from(out.replace(/\s/g, ""), "base64").toString("utf-8");
@@ -104,10 +127,10 @@ export async function fetchFile(
   filePath: string,
   ref?: string,
 ): Promise<string | null> {
-  const query = ref ? `?ref=${ref}` : "";
+  const query = ref ? `?ref=${encodeRef(ref)}` : "";
   const out = await ghJq([
     "api",
-    `repos/${owner}/${repo}/contents/${filePath}${query}`,
+    `repos/${encodeRoutePath(owner)}/${encodeRoutePath(repo)}/contents/${encodeRoutePath(filePath)}${query}`,
     "--jq",
     ".content",
   ]);
@@ -121,6 +144,11 @@ export async function fetchFile(
 
 /** Default branch, needed because tree lookups require a concrete ref. */
 export async function defaultBranch(owner: string, repo: string): Promise<string | null> {
-  const out = await ghJq(["api", `repos/${owner}/${repo}`, "--jq", ".default_branch"]);
+  const out = await ghJq([
+    "api",
+    `repos/${encodeRoutePath(owner)}/${encodeRoutePath(repo)}`,
+    "--jq",
+    ".default_branch",
+  ]);
   return out?.trim() || null;
 }

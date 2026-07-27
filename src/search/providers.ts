@@ -15,7 +15,7 @@ import type { ResolvedConfig } from "../config.ts";
 import { GleanError } from "../errors.ts";
 import { hasCredentialSource, resolveCredential } from "../credentials.ts";
 import type { RateLimiters } from "../ratelimit.ts";
-import type { Backend, SearchAnswer } from "./citations.ts";
+import { dedupeCitations, type Backend, type SearchAnswer } from "./citations.ts";
 import { resolveAccountId } from "./codex/auth.ts";
 import { runCodexSearch, type Freshness, type SearchContextSize } from "./codex/responses.ts";
 import { resolveCodexModel } from "./codex/models.ts";
@@ -123,7 +123,10 @@ function answer(
     backend,
     query,
     answer: result.text,
-    citations: result.citations,
+    // Deduped here rather than in each backend: only codex collects into a Map,
+    // so tavily, perplexity, xai and exa were all free to repeat a URL — and
+    // the position in this list is what the numbered source list calls its rank.
+    citations: dedupeCitations(result.citations),
     searchCalls: result.searchCalls ?? [],
     raw: result.raw,
   };

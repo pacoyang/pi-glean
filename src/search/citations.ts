@@ -6,8 +6,6 @@
  * yields the exact sentence the model attributed to that source. xAI returns
  * bare URLs, so the sentence has to be recovered from the inline `[[n]](url)`
  * markers instead.
- *
- * Implementation lands in phase 1; the types are needed by storage.ts now.
  */
 
 export type Backend = "codex" | "xai" | "tavily" | "perplexity" | "exa";
@@ -48,19 +46,6 @@ export function dedupeCitations(citations: Citation[]): Citation[] {
     if (!seen.has(normalized)) seen.set(normalized, { ...citation, url: normalized });
   }
   return Array.from(seen.values());
-}
-
-/**
- * The passage the model attributed to a citation.
- *
- * Only meaningful when the backend supplied offsets — Codex does, via
- * `url_citation` annotations. Returns undefined rather than guessing.
- */
-export function attributedText(answer: string, citation: Citation): string | undefined {
-  const { startIndex, endIndex } = citation;
-  if (startIndex === undefined || endIndex === undefined) return undefined;
-  if (startIndex < 0 || endIndex > answer.length || startIndex >= endIndex) return undefined;
-  return answer.slice(startIndex, endIndex);
 }
 
 /** Renders citations as a numbered source list; rank is the array position. */

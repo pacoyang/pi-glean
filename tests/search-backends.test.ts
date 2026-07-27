@@ -374,3 +374,35 @@ describe("credential probing", () => {
     assert.equal(await PROVIDERS.exa.isAvailable(ctx), true);
   });
 });
+
+describe("citation normalization", () => {
+  it("dedupes and drops uncitable URLs whichever backend answered", async () => {
+    // Only codex collected into a Map; every other backend pushed straight into
+    // an array, so a repeated URL showed up twice in the numbered source list
+    // and shifted the rank of everything after it.
+    const fake = fakeFetch(() =>
+      jsonResponse({
+        answer: "text",
+        results: [
+          { title: "React", url: "https://react.dev" },
+          { title: "React again", url: "https://react.dev" },
+          { title: "Other", url: "https://other.test" },
+          { title: "Relative", url: "/not-citable" },
+        ],
+      }),
+    );
+    const ctx = providerContext({
+      config: testConfig(),
+      env: { TAVILY_API_KEY: "k" } as NodeJS.ProcessEnv,
+      fetchImpl: fake.fetch,
+    });
+
+    const result = await PROVIDERS.tavily.search({ query: "q" }, ctx);
+    assert.deepEqual(
+      result.citations.map((citation) => citation.url),
+      ["https://react.dev/", "https://other.test/"],
+    );
+    // First seen wins, because that position is the rank.
+    assert.equal(result.citations[0]?.title, "React");
+  });
+});

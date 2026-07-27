@@ -92,6 +92,19 @@ describe("parseGitHubUrl", () => {
     }
   });
 
+  it("refuses a traversal in the in-repo path", () => {
+    // The path is interpolated into `gh api repos/o/r/contents/<path>`, and gh
+    // normalizes the route — so `../../../user` there becomes a call to /user
+    // as the authenticated GitHub account.
+    for (const url of [
+      "https://github.com/o/r/blob/main/..%2F..%2F..%2Fuser",
+      "https://github.com/o/r/blob/main/a/..%2F..%2F..%2F..%2Fuser",
+      "https://github.com/o/r/tree/main/src/..%2F..",
+    ]) {
+      assert.equal(parseGitHubUrl(url), null, url);
+    }
+  });
+
   it("still accepts the legitimate URLs that look similar", () => {
     // A branch name really can contain a slash — but GitHub spells it with a
     // literal `/`, which the path split has already separated.
