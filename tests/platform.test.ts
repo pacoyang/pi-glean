@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   type Binary,
@@ -82,5 +85,32 @@ describe("createBinaryDetector", () => {
     await detector.detect("git");
     await detector.detect("gh");
     assert.deepEqual(probed, ["git", "gh"]);
+  });
+});
+
+describe("README stays in step with the hint table", () => {
+  const readme = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "..", "README.md"),
+    "utf-8",
+  );
+
+  it("documents an install command for every binary", () => {
+    // The commands live here because an error message has to name one, and the
+    // README repeats them because a reader should not have to trigger a failure
+    // to find out what to install. Two copies, so this asserts they agree.
+    for (const binary of ["ffmpeg", "yt-dlp", "gh", "git"] as const) {
+      assert.ok(readme.includes(binary), `README never mentions ${binary}`);
+    }
+    assert.match(readme, /brew install .*ffmpeg/);
+    assert.match(readme, /apt install .*ffmpeg/);
+    assert.match(readme, /pipx install yt-dlp/, "apt's yt-dlp is too old to recommend");
+  });
+
+  it("does not promise a platform the hint table cannot serve", () => {
+    // installHint answers for darwin, linux and a fallback; the README should
+    // not imply a fourth is handled specially.
+    assert.ok(installHint("ffmpeg", "darwin").includes("brew"));
+    assert.ok(installHint("ffmpeg", "linux").includes("apt"));
+    assert.ok(installHint("yt-dlp", "linux").includes("pipx"));
   });
 });

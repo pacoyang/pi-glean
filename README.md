@@ -146,7 +146,21 @@ Missing binaries degrade one capability, never the whole fetch:
 | `ffmpeg` / `ffprobe` | Frame extraction    | Only frame requests fail                        |
 | `yt-dlp`             | YouTube transcripts | Gemini is used instead when configured          |
 
-`/glean-status` lists which are present and prints the right install command for your platform.
+```bash
+# macOS
+brew install ffmpeg yt-dlp gh git
+
+# Debian/Ubuntu — ffprobe ships with ffmpeg
+sudo apt install ffmpeg git gh
+pipx install yt-dlp          # distro packages of yt-dlp are usually too old
+```
+
+On other platforms: [ffmpeg](https://ffmpeg.org/download.html),
+[yt-dlp](https://github.com/yt-dlp/yt-dlp#installation),
+[gh](https://cli.github.com), [git](https://git-scm.com/downloads).
+
+`/glean-status` shows which of these are present, and any error caused by a missing one
+repeats the install command for the platform you are actually on.
 
 ## Commands and shortcuts
 
