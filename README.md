@@ -152,7 +152,12 @@ brew install ffmpeg yt-dlp gh git
 
 # Debian/Ubuntu — ffprobe ships with ffmpeg
 sudo apt install ffmpeg git gh
-pipx install yt-dlp          # distro packages of yt-dlp are usually too old
+
+# yt-dlp: the standalone build, which is what upstream recommends on Linux.
+# Distro packages lag behind YouTube's changes, and the pip/pipx routes need a
+# Python toolchain a server may not have.
+sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+  -o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp
 ```
 
 On other platforms: [ffmpeg](https://ffmpeg.org/download.html),

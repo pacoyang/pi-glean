@@ -31,7 +31,9 @@ const HINTS: Record<Binary, Record<Platform, string>> = {
   },
   "yt-dlp": {
     darwin: "brew install yt-dlp",
-    linux: "pipx install yt-dlp  (distro packages are usually too old)",
+    linux:
+      "sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux " +
+      "-o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp",
     other: "pip install -U yt-dlp",
   },
   gh: {

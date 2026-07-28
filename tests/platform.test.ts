@@ -21,8 +21,14 @@ describe("installHint", () => {
     }
   });
 
-  it("uses pipx for yt-dlp on linux because distro packages lag", () => {
-    assert.match(installHint("yt-dlp", "linux"), /pipx install yt-dlp/);
+  it("uses the standalone yt-dlp build on linux", () => {
+    // Three routes were considered. The distro package lags behind YouTube's
+    // changes; pip and pipx need a Python toolchain, and pipx is itself
+    // something to install first — `command not found: pipx` on a bare server
+    // is how this was found. The standalone build needs nothing.
+    const hint = installHint("yt-dlp", "linux");
+    assert.match(hint, /yt-dlp_linux/);
+    assert.doesNotMatch(hint, /pipx|apt install yt-dlp/);
   });
 
   it("falls back to a generic hint on unsupported platforms", () => {
@@ -103,7 +109,9 @@ describe("README stays in step with the hint table", () => {
     }
     assert.match(readme, /brew install .*ffmpeg/);
     assert.match(readme, /apt install .*ffmpeg/);
-    assert.match(readme, /pipx install yt-dlp/, "apt's yt-dlp is too old to recommend");
+    // Not apt and not pipx: the distro package lags, and pipx is itself a
+    // prerequisite a bare server does not have.
+    assert.match(readme, /releases\/latest\/download\/yt-dlp_linux/);
   });
 
   it("does not promise a platform the hint table cannot serve", () => {
@@ -111,6 +119,6 @@ describe("README stays in step with the hint table", () => {
     // not imply a fourth is handled specially.
     assert.ok(installHint("ffmpeg", "darwin").includes("brew"));
     assert.ok(installHint("ffmpeg", "linux").includes("apt"));
-    assert.ok(installHint("yt-dlp", "linux").includes("pipx"));
+    assert.ok(installHint("yt-dlp", "linux").includes("yt-dlp_linux"));
   });
 });
