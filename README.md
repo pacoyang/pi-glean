@@ -76,9 +76,9 @@ than a confirmed one.
 Nothing else needs configuring. pi-glean registers the subscription grant itself,
 so `/login grok-build` needs no other extension installed; `XAI_API_KEY` is read
 from pi's own xAI slot and needs no login at all. The subscription wins when both
-are present, and each credential goes to the host it is entitled to reach. The two hosts are not interchangeable: an API key is not
-recognised by the proxy. Set `search.xai.baseUrl` to override.
-
+are present, and each credential goes to the host it is entitled to reach — the
+two are not interchangeable, as an API key is not recognised by the proxy. Set
+`search.xai.baseUrl` to override.
 
 ### xAI model names are pinned
 
