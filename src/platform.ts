@@ -52,7 +52,7 @@ export function currentPlatform(platform: string = process.platform): Platform {
   return "other";
 }
 
-export function isKnownBinary(name: string): name is Binary {
+function isKnownBinary(name: string): name is Binary {
   return name in HINTS;
 }
 

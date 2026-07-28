@@ -168,7 +168,7 @@ export function renderSearchResult(
 }
 
 /** Pulls the text blocks out of a tool result, ignoring images. */
-export function resultText(result: AgentToolResult<unknown>): string {
+function resultText(result: AgentToolResult<unknown>): string {
   return (result.content ?? [])
     .filter((block): block is { type: "text"; text: string } => block.type === "text")
     .map((block) => block.text)

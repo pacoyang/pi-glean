@@ -74,7 +74,7 @@ export function errorMessage(error: unknown): string {
   return String(error);
 }
 
-export function isAbortError(error: unknown): boolean {
+function isAbortError(error: unknown): boolean {
   if (error instanceof Error) {
     if (error.name === "AbortError") return true;
     if (error.name === "TimeoutError") return true;

@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.1.0] — 2026-07-27
+## [0.1.0] — 2026-07-28
 
 First release. One extension covering search and reading, working out of the
 box with no credentials, and behaving identically on macOS and Linux.
@@ -29,6 +29,10 @@ box with no credentials, and behaving identically on macOS and Linux.
   not recognised by the Grok CLI proxy.
 - Codex citations carry character offsets into the answer text, so a claim can
   be traced to the exact sentence attributed to a source.
+- A backend that answers without actually searching is rejected rather than
+  passed on. Some endpoints accept a search tool, ignore it, and reply from the
+  model's own memory — fluent, unsourced, and indistinguishable downstream from
+  a real result.
 
 ### Reading
 
@@ -57,7 +61,14 @@ box with no credentials, and behaving identically on macOS and Linux.
 - Generated files are written under `os.tmpdir()` in a uid-scoped `0700`
   directory. Nothing is ever written under `$HOME`.
 - Credentials resolve from literals, `$ENV_VAR` or `!command`, and are redacted
-  from every error message.
+  from every error message. Resolution never runs during a capability probe, so
+  a credential helper is not invoked by `/glean-status`.
+- Project configuration is read only once pi reports whether the project is
+  trusted. Extensions load before any session exists, and that file can point a
+  backend at another host.
+- GitHub URLs are rejected if any component could escape the clone root. Path
+  segments are percent-decoded, so a `%2F..%2F..` ref would otherwise normalise
+  out of it — and the clone path is removed recursively before cloning.
 
 ### Configuration
 
