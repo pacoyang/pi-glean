@@ -174,7 +174,6 @@ pi keeps the **first** registration of any tool name and silently drops later on
 
 The `codex` backend talks to `chatgpt.com/backend-api/codex/*` the way the official Codex CLI does. That interface is not documented or supported for third-party use; it can change or stop working without notice, and using it is subject to OpenAI's terms. It is optional — every other backend is unaffected if it breaks.
 
-
 ## License
 
-MIT © 2026 pacoyang
+MIT © 2026 pacoyang. Copied third-party source is credited in [NOTICE](NOTICE).
