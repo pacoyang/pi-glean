@@ -62,6 +62,18 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
 
+          # The gate is what the test runner reported, not its exit code.
+          # `--experimental-test-coverage` injects NODE_V8_COVERAGE into every
+          # spawned process — including the ones exec.ts kills to prove its
+          # timeout escalation works — and one killed partway through writing
+          # leaves a truncated file. The reporter then fails and node exits 1
+          # with every test passing. That is a tooling crash, not a red build;
+          # the coverage summary below already degrades to "unavailable".
+          if [ "$status" != "0" ] && grep -qE "^. fail 0$" coverage.txt; then
+            echo "Tests passed; only the coverage reporter failed."
+            status=0
+          fi
+
           summary=$(node <<'NODE'
           const fs = require('node:fs');
           const text = fs.readFileSync('coverage.txt', 'utf8');
