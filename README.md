@@ -1,6 +1,38 @@
 # pi-glean
 
-Zero-config web search and URL fetching for [pi](https://github.com/earendil-works/pi) — works with no API keys, and uses your ChatGPT Plus/Pro or Grok subscription for higher-quality answers when available. Plus GitHub repos, PDFs, YouTube, and video frames.
+[![npm](https://img.shields.io/npm/v/pi-glean?style=flat-square)](https://www.npmjs.com/package/pi-glean)
+[![node](https://img.shields.io/node/v/pi-glean?style=flat-square)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/pi-glean?style=flat-square)](LICENSE)
+
+**Web search and URL fetching for the [Pi coding agent](https://github.com/earendil-works/pi) — with no API keys.**
+
+Every comparable extension asks for a key before it will do anything. This one searches
+on a fresh install: Exa's public endpoint answers unauthenticated, and reading a URL
+never needed a credential in the first place. A ChatGPT or Grok subscription, if you have
+one, upgrades the answers rather than unlocking the feature.
+
+Reading is the other half, and it is not only HTML: GitHub repositories arrive as a real
+file tree the agent can grep, PDFs as text, YouTube as a transcript, video as frames.
+
+```
+glean_search   codex · xai · tavily · perplexity · exa   ──►  answer + citations
+glean_fetch    html · pdf · github · youtube · video     ──►  markdown + images
+```
+
+## Table of Contents
+
+- [Install](#install)
+- [Tools](#tools)
+- [Search backends](#search-backends)
+- [Reading](#reading)
+- [Optional binaries](#optional-binaries)
+- [Commands and shortcuts](#commands-and-shortcuts)
+- [Configuration](#configuration)
+- [Security](#security)
+- [Development](#development)
+- [License](#license)
+
+## Install
 
 ```bash
 pi install npm:pi-glean
@@ -8,7 +40,8 @@ pi install npm:pi-glean
 
 Or load a local checkout without installing, with `pi -e /path/to/pi-glean`.
 
-That is the whole setup. Search works immediately through Exa's public MCP endpoint, which needs no credential; URL fetching needs no credential either. Subscriptions and API keys are optional upgrades, and `/glean-status` will always tell you which ones are in play.
+That is the whole setup — there is nothing to configure before the first search.
+`/glean-status` reports which backends and binaries are in play at any point.
 
 ## Tools
 
@@ -173,6 +206,32 @@ pi keeps the **first** registration of any tool name and silently drops later on
 ## A note on the Codex backend
 
 The `codex` backend talks to `chatgpt.com/backend-api/codex/*` the way the official Codex CLI does. That interface is not documented or supported for third-party use; it can change or stop working without notice, and using it is subject to OpenAI's terms. It is optional — every other backend is unaffected if it breaks.
+
+## Development
+
+```bash
+npm install
+npm test              # no network, no external binaries, no model calls
+npm run check         # tsc --noEmit
+npm run lint          # oxlint
+npm run format        # oxfmt --write
+```
+
+There is no build step. The package ships TypeScript and Pi loads it through jiti, so a
+local checkout runs with `pi -e /path/to/pi-glean` exactly as an installed copy does.
+
+Network calls take an injectable `fetchImpl`, DNS an injectable `lookup`, and the media
+and credential paths an injectable command runner — so the suite covers the SSRF guard,
+backend routing and frame extraction without reaching the network or needing ffmpeg.
+Where a seam would have meant contorting the code, the tests target the pure parts
+instead: `parseGitHubUrl` and the path-containment check are tested directly rather than
+by faking `git clone`.
+
+What that leaves untested against a live service is stated as such rather than assumed —
+see the note on the xAI API-credit path.
+
+CI runs the suite on macOS and Linux against two Pi versions, which is where the
+credential-reading path forks.
 
 ## License
 
