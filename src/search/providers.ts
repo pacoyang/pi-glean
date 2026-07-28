@@ -23,7 +23,7 @@ import { createTransport } from "./codex/transport.ts";
 import { runExaSearch } from "./exa.ts";
 import { runPerplexitySearch } from "./perplexity.ts";
 import { runTavilySearch } from "./tavily.ts";
-import { baseUrlForProvider, resolveXaiCredential } from "./xai/auth.ts";
+import { resolveXaiCredential } from "./xai/auth.ts";
 import { runXaiWebSearch } from "./xai/responses.ts";
 
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
@@ -222,7 +222,7 @@ export const PROVIDERS: Record<Backend, ProviderDef> = {
           ...(xaiConfig.webSearchModel ? { model: xaiConfig.webSearchModel } : {}),
         },
         {
-          baseUrl: xaiConfig.baseUrl ?? baseUrlForProvider(credential.providerId),
+          baseUrl: xaiConfig.baseUrl ?? credential.baseUrl,
           ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
           sessionId: ctx.sessionId ?? null,

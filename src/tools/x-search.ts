@@ -24,7 +24,7 @@ import type { ResolvedConfig } from "../config.ts";
 import { GleanError, classifyError } from "../errors.ts";
 import { formatSources } from "../search/citations.ts";
 import { CUSTOM_TYPE, generateId, storeResult } from "../storage.ts";
-import { baseUrlForProvider, resolveXaiCredential } from "../search/xai/auth.ts";
+import { resolveXaiCredential } from "../search/xai/auth.ts";
 import { runXSearch } from "../search/xai/responses.ts";
 import { renderSearchResult, toolResultComponent, type ThemeLike } from "../render.ts";
 
@@ -89,7 +89,7 @@ export function buildXSearchTool(pi: ExtensionAPI, getConfig: () => ResolvedConf
             ...(config.search.xai.xSearchModel ? { model: config.search.xai.xSearchModel } : {}),
           },
           {
-            baseUrl: config.search.xai.baseUrl ?? baseUrlForProvider(credential.providerId),
+            baseUrl: config.search.xai.baseUrl ?? credential.baseUrl,
             ...(signal ? { signal } : {}),
             sessionId: sessionIdOf(ctx),
           },

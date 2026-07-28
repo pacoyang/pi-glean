@@ -133,9 +133,8 @@ export async function callXaiResponses(
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
-      // Model names are pinned rather than discovered — the search tools need
-      // specific ones, not whichever is default — so a rename upstream shows up
-      // here and the way out is a config override, not a different backend.
+      // Pinned model names make an upstream rename our problem; the hint below
+      // names the override rather than leaving a bare 400.
       const unknownModel = /model not found/i.test(text);
       throw new GleanError(
         classifyHttpStatus(response.status),
@@ -335,6 +334,23 @@ function assertSearched(
   });
 }
 
+/**
+ * Shared tail of both search calls.
+ *
+ * Extracted so the unsearched-answer guard cannot be forgotten by whatever
+ * search function is added next — it is the one step that turns a plausible
+ * non-answer into an error.
+ */
+function toSearchResult(result: XaiResponsesResult, options: XaiCallOptions): XaiSearchResult {
+  const { text, searchCalls, annotations } = extractOutput(result);
+  const citations = citationsFrom(result, annotations);
+  assertSearched(
+    { searchCalls, citations, raw: result },
+    options.baseUrl ?? XAI_API_VARIANT.baseUrl,
+  );
+  return { text, searchCalls, citations, raw: result };
+}
+
 export async function runXaiWebSearch(
   apiKey: string,
   params: { query: string; allowedDomains?: string[]; model?: string },
@@ -360,13 +376,7 @@ export async function runXaiWebSearch(
     options,
   );
 
-  const { text, searchCalls, annotations } = extractOutput(result);
-  const citations = citationsFrom(result, annotations);
-  assertSearched(
-    { searchCalls, citations, raw: result },
-    options.baseUrl ?? XAI_API_VARIANT.baseUrl,
-  );
-  return { text, searchCalls, citations, raw: result };
+  return toSearchResult(result, options);
 }
 
 export async function runXSearch(
@@ -392,11 +402,5 @@ export async function runXSearch(
     { ...options, sendSessionAffinity: true },
   );
 
-  const { text, searchCalls, annotations } = extractOutput(result);
-  const citations = citationsFrom(result, annotations);
-  assertSearched(
-    { searchCalls, citations, raw: result },
-    options.baseUrl ?? XAI_API_VARIANT.baseUrl,
-  );
-  return { text, searchCalls, citations, raw: result };
+  return toSearchResult(result, options);
 }

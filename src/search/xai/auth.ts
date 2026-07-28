@@ -74,37 +74,29 @@ export interface ApiKeyLookup {
 
 export interface XaiCredential {
   token: string;
-  /** Which slot it came from — this decides the endpoint. */
-  providerId: string;
+  /** Host this credential is entitled to reach; a config override still wins. */
+  baseUrl: string;
 }
 
 /**
  * First xAI credential available, preferring the subscription grant.
  *
- * The slot is returned alongside the token because the two grants are entitled
- * to different hosts.
+ * The endpoint comes back with it because the two grants are entitled to
+ * different hosts, and no caller has ever wanted one without the other.
  */
 export async function resolveXaiCredential(
   registry: ApiKeyLookup,
 ): Promise<XaiCredential | undefined> {
-  for (const { providerId } of XAI_VARIANTS) {
+  for (const { providerId, baseUrl } of XAI_VARIANTS) {
     let token: string | undefined;
     try {
       token = (await registry.getApiKeyForProvider(providerId)) || undefined;
     } catch {
       continue;
     }
-    if (token) return { token, providerId };
+    if (token) return { token, baseUrl };
   }
   return undefined;
-}
-
-/** Endpoint for a credential, or the public API for an unknown slot. */
-export function baseUrlForProvider(providerId: string): string {
-  return (
-    XAI_VARIANTS.find((variant) => variant.providerId === providerId)?.baseUrl ??
-    XAI_API_VARIANT.baseUrl
-  );
 }
 const DEVICE_CODE_URL = "https://auth.x.ai/oauth2/device/code";
 const TOKEN_URL = "https://auth.x.ai/oauth2/token";
